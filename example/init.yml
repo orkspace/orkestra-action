@@ -1,0 +1,27 @@
+name: Generate Example Pack with ork init
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  init:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 1: Run ork init with arguments
+      - name: Initialize example pack
+        id: init
+        uses: orkspace/orkestra-action@v1
+        with:
+          init: "my-operator --pack beginner"
+
+      # Step 2: Inspect the generated pack
+      - name: Inspect example pack
+        run: |
+          echo "Generated example pack:"
+          ls -R ${{ steps.init.outputs.init_dir }}
