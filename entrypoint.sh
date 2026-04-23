@@ -2,17 +2,18 @@
 set -euo pipefail
 
 KATALOG_INPUT="$1"
-ORK_VERSION="$2"
-OUTDIR="$3"
-DO_KOMPOSE="$4"
-DO_VALIDATE="$5"
-DO_TEMPLATE="$6"
-DO_RBAC="$7"
-DO_CONFIGMAP="$8"
-DO_BUNDLE="$9"
-INIT_ARGS="${10}"
-DO_RUN="${11:-false}"
-RUN_TIMEOUT="${12:-30}"
+PACK_NAME="$2"
+EXAMPLE_SUBDIR="$3"
+ORK_VERSION="$4"
+OUTDIR="$5"
+DO_KOMPOSE="$6"
+DO_VALIDATE="$7"
+DO_TEMPLATE="$8"
+DO_RBAC="$9"
+DO_CONFIGMAP="${10}"
+DO_BUNDLE="${11}"
+
+OPERATOR_NAME="orkestra-operator"
 
 echo "==> Orkestra CI Action starting"
 
@@ -56,9 +57,11 @@ echo "Using Ork version:"
 ork version || true
 
 # -------------------------------
-# 2. Resolve katalog file (may be overridden later by init)
+# 2. Determine katalog file (may be created via init)
 # -------------------------------
 KATALOG=""
+NEEDS_INIT=false
+
 if [[ -n "$KATALOG_INPUT" ]]; then
     KATALOG="$KATALOG_INPUT"
 elif [[ -f "katalog.yaml" ]]; then
@@ -66,22 +69,71 @@ elif [[ -f "katalog.yaml" ]]; then
 elif [[ -f "komposer.yaml" ]]; then
     KATALOG="komposer.yaml"
 else
-    if [[ -n "$INIT_ARGS" ]]; then
-        echo "No existing katalog found, but 'ork init' will be run. Proceeding without katalog."
-    else
-        echo "ERROR: No katalog.yaml or komposer.yaml found, and no katalog input provided."
-        exit 1
-    fi
+    NEEDS_INIT=true
 fi
-[[ -n "$KATALOG" ]] && echo "Using katalog: $KATALOG"
 
 # -------------------------------
-# 3. Prepare output directory
+# 3. Initialize operator if needed
+# -------------------------------
+CRD_PATH=""
+CR_PATH=""
+EXAMPLE_DIR=""
+OPERATOR_ROOT=""
+EXAMPLES_BASE=""
+
+if [[ "$NEEDS_INIT" == "true" ]]; then
+    echo "==> Initializing operator: $OPERATOR_NAME with pack: $PACK_NAME"
+    ork init "$OPERATOR_NAME" --pack "$PACK_NAME"
+
+    OPERATOR_ROOT="$OPERATOR_NAME"
+    EXAMPLES_BASE="$OPERATOR_NAME/examples/$PACK_NAME"
+
+    if [[ -z "$EXAMPLE_SUBDIR" ]]; then
+        echo "ERROR: example-subdir is required when initializing a new operator"
+        exit 1
+    fi
+
+    EXAMPLE_DIR="$EXAMPLES_BASE/$EXAMPLE_SUBDIR"
+    if [[ ! -d "$EXAMPLE_DIR" ]]; then
+        echo "ERROR: Example directory not found: $EXAMPLE_DIR"
+        echo "Available examples:"
+        ls -1 "$EXAMPLES_BASE" || true
+        exit 1
+    fi
+
+    KATALOG="$EXAMPLE_DIR/katalog.yaml"
+    CRD_PATH="$EXAMPLE_DIR/crd.yaml"
+    CR_PATH="$EXAMPLE_DIR/cr.yaml"
+
+    if [[ ! -f "$KATALOG" ]]; then
+        echo "ERROR: katalog.yaml not found in $EXAMPLE_DIR"
+        exit 1
+    fi
+
+    echo "init_dir=$OPERATOR_ROOT" >> "$GITHUB_OUTPUT"
+    echo "operator_dir=$OPERATOR_ROOT" >> "$GITHUB_OUTPUT"
+    echo "katalog_path=$KATALOG" >> "$GITHUB_OUTPUT"
+    echo "crd_path=$CRD_PATH" >> "$GITHUB_OUTPUT"
+    echo "cr_path=$CR_PATH" >> "$GITHUB_OUTPUT"
+    echo "example_dir=$EXAMPLE_DIR" >> "$GITHUB_OUTPUT"
+
+    echo "==> Operator initialized:"
+    echo "    root:        $OPERATOR_ROOT"
+    echo "    pack:        $PACK_NAME"
+    echo "    example:     $EXAMPLE_SUBDIR"
+    echo "    katalog:     $KATALOG"
+else
+    # If katalog provided without init, we still need to output katalog_path
+    echo "katalog_path=$KATALOG" >> "$GITHUB_OUTPUT"
+fi
+
+# -------------------------------
+# 4. Prepare output directory
 # -------------------------------
 mkdir -p "$OUTDIR"
 
 # -------------------------------
-# 4. ork kompose (optional)
+# 5. ork kompose (optional)
 # -------------------------------
 if [[ "$DO_KOMPOSE" == "true" ]]; then
     if [[ -z "$KATALOG" ]]; then
@@ -93,37 +145,6 @@ if [[ "$DO_KOMPOSE" == "true" ]]; then
     ork kompose -k "$KATALOG" -o "$OUTDIR/komposed/katalog.yaml"
     KATALOG="$OUTDIR/komposed/katalog.yaml"
     echo "komposed_katalog=$KATALOG" >> "$GITHUB_OUTPUT"
-fi
-
-# -------------------------------
-# 5. Run ork init (optional)
-# -------------------------------
-if [[ -n "$INIT_ARGS" ]]; then
-    echo "==> Running: ork init $INIT_ARGS"
-
-    # Extract operator name (first argument, before any options)
-    OP_NAME=$(echo "$INIT_ARGS" | awk '{print $1}')
-
-    # Extract pack name using Bash regex (supports --pack beginner or --pack=beginner)
-    PACK_NAME="beginner"  # default
-    if [[ "$INIT_ARGS" =~ --pack[=\ ]([^[:space:]]+) ]]; then
-        PACK_NAME="${BASH_REMATCH[1]}"
-    fi
-
-    # Run init
-    ork init $INIT_ARGS
-
-    # Construct paths after init
-    OP_ROOT="$OP_NAME"
-    PACK_DIR="$OP_NAME/examples/$PACK_NAME"
-
-    echo "init_dir=$OP_ROOT" >> "$GITHUB_OUTPUT"
-    echo "operator_dir=$PACK_DIR" >> "$GITHUB_OUTPUT"
-
-    echo "==> Operator initialized:"
-    echo "    root:        $OP_ROOT"
-    echo "    pack:        $PACK_NAME"
-    echo "    examples:    $PACK_DIR"
 fi
 
 # -------------------------------
@@ -190,33 +211,6 @@ if [[ "$DO_BUNDLE" == "true" ]]; then
     echo "==> Running: ork generate bundle"
     ork generate bundle -k "$KATALOG" -o "$OUTDIR/bundle.yaml"
     echo "bundle_file=$OUTDIR/bundle.yaml" >> "$GITHUB_OUTPUT"
-fi
-
-# -------------------------------
-# 11. ork run (optional)
-# -------------------------------
-if [[ "$DO_RUN" == "true" ]]; then
-    if [[ -z "$KATALOG" ]]; then
-        echo "ERROR: Cannot run without a katalog file."
-        exit 1
-    fi
-    echo "==> Running: ork run (timeout: ${RUN_TIMEOUT}s)"
-    mkdir -p "$OUTDIR/run"
-    RUN_LOG="$OUTDIR/run/ork-run.log"
-    ork run -k "$KATALOG" > "$RUN_LOG" 2>&1 &
-    RUN_PID=$!
-    echo "run_pid=$RUN_PID" >> "$GITHUB_OUTPUT"
-    echo "run_log=$RUN_LOG" >> "$GITHUB_OUTPUT"
-    SECONDS=0
-    while kill -0 "$RUN_PID" 2>/dev/null; do
-        if (( SECONDS >= RUN_TIMEOUT )); then
-            echo "==> ork run timed out after ${RUN_TIMEOUT}s, stopping..."
-            kill "$RUN_PID" || true
-            break
-        fi
-        sleep 1
-    done
-    echo "==> ork run completed or stopped"
 fi
 
 echo "==> Orkestra CI Action completed successfully"

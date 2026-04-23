@@ -3,19 +3,19 @@ description: "Run Orkestra CLI commands in CI with versioned reproducibility"
 
 inputs:
   katalog:
-    description: "Path to katalog.yaml or komposer.yaml"
+    description: "Path to existing katalog.yaml or komposer.yaml (optional, if not provided, a new operator will be initialized)"
     required: false
     default: ""
 
-  run:
-    description: "Run the Orkestra operator runtime"
+  pack:
+    description: "Pack to use when initializing a new operator (beginner, intermediate, advanced, use-cases)"
     required: false
-    default: "false"
+    default: "beginner"
 
-  run-timeout:
-    description: "Maximum number of seconds to allow ork run to execute before stopping"
+  example-subdir:
+    description: "Subdirectory under examples/<pack>/ containing the katalog, CRD, and CR (e.g., '01-hello-website')"
     required: false
-    default: "30"
+    default: ""
 
   ork-version:
     description: "Version of Ork CLI to use (e.g. v1.2.3, latest)"
@@ -26,7 +26,7 @@ inputs:
     description: "Directory to write artifacts into"
     required: false
     default: "orkestra-artifacts"
-  
+
   kompose:
     description: "Run 'ork kompose' before other steps"
     required: false
@@ -57,11 +57,6 @@ inputs:
     required: false
     default: "false"
 
-  init:
-    description: "Run 'ork init <args>'"
-    required: false
-    default: ""
-
 outputs:
   komposed_katalog:
     description: "Path to the komposed katalog.yaml"
@@ -79,12 +74,22 @@ outputs:
     description: "Root directory of the initialized operator"
   operator_dir:
     description: "Directory containing the expanded example pack (examples/<pack>)"
+  katalog_path:
+    description: "Path to the katalog.yaml file (after kompose/init)"
+  crd_path:
+    description: "Path to the CRD YAML file (after init)"
+  cr_path:
+    description: "Path to the CR YAML file (after init)"
+  example_dir:
+    description: "Directory containing the chosen example (e.g., .../01-hello-website)"
 
 runs:
   using: "docker"
   image: "Dockerfile"
   args:
     - ${{ inputs.katalog }}
+    - ${{ inputs.pack }}
+    - ${{ inputs.example-subdir }}
     - ${{ inputs.ork-version }}
     - ${{ inputs.output-dir }}
     - ${{ inputs.kompose }}
@@ -93,6 +98,3 @@ runs:
     - ${{ inputs.generate-rbac }}
     - ${{ inputs.generate-configmap }}
     - ${{ inputs.generate-bundle }}
-    - ${{ inputs.init }}
-    - ${{ inputs.run }}
-    - ${{ inputs.run-timeout }}
