@@ -30,18 +30,13 @@ install_ork() {
     local version="$1"
     echo "==> Installing Ork CLI version: ${version:-latest}"
     ORKESTRA_RELEASES="https://raw.githubusercontent.com/ialexeze/orkestra/main/install.sh"
-
-    # Pass version (empty = latest) and custom install dir to install script
     curl -sSL "${ORKESTRA_RELEASES}" | ORK_VERSION="$version" ORK_INSTALL_DIR="$CACHE_DIR" bash
 }
 
-# Check if ork is already available and matches requested version
 if command -v ork >/dev/null 2>&1; then
     INSTALLED_VERSION=$(ork version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "")
     REQ_VERSION="$ORK_VERSION"
-
     if [[ "$REQ_VERSION" == "latest" ]]; then
-        # Always re‑install "latest" to ensure we have the most recent build
         install_ork ""
     elif [[ "$INSTALLED_VERSION" == "$REQ_VERSION" ]]; then
         echo "Ork CLI $INSTALLED_VERSION already installed in cache, skipping download."
@@ -50,7 +45,6 @@ if command -v ork >/dev/null 2>&1; then
         install_ork "$REQ_VERSION"
     fi
 else
-    # No ork found, perform fresh install
     if [[ "$ORK_VERSION" == "latest" ]]; then
         install_ork ""
     else
@@ -62,8 +56,9 @@ echo "Using Ork version:"
 ork version || true
 
 # -------------------------------
-# 2. Resolve katalog file
+# 2. Resolve katalog file (may be overridden later by init)
 # -------------------------------
+KATALOG=""
 if [[ -n "$KATALOG_INPUT" ]]; then
     KATALOG="$KATALOG_INPUT"
 elif [[ -f "katalog.yaml" ]]; then
@@ -71,11 +66,14 @@ elif [[ -f "katalog.yaml" ]]; then
 elif [[ -f "komposer.yaml" ]]; then
     KATALOG="komposer.yaml"
 else
-    echo "ERROR: No katalog.yaml or komposer.yaml found, and no katalog input provided."
-    exit 1
+    if [[ -n "$INIT_ARGS" ]]; then
+        echo "No existing katalog found, but 'ork init' will be run. Proceeding without katalog."
+    else
+        echo "ERROR: No katalog.yaml or komposer.yaml found, and no katalog input provided."
+        exit 1
+    fi
 fi
-
-echo "Using katalog: $KATALOG"
+[[ -n "$KATALOG" ]] && echo "Using katalog: $KATALOG"
 
 # -------------------------------
 # 3. Prepare output directory
@@ -86,6 +84,10 @@ mkdir -p "$OUTDIR"
 # 4. ork kompose (optional)
 # -------------------------------
 if [[ "$DO_KOMPOSE" == "true" ]]; then
+    if [[ -z "$KATALOG" ]]; then
+        echo "ERROR: Cannot run kompose without a katalog file."
+        exit 1
+    fi
     echo "==> Running: ork kompose"
     mkdir -p "$OUTDIR/komposed"
     ork kompose -k "$KATALOG" -o "$OUTDIR/komposed/katalog.yaml"
@@ -99,42 +101,48 @@ fi
 if [[ -n "$INIT_ARGS" ]]; then
     echo "==> Running: ork init $INIT_ARGS"
 
-    # Extract operator name (first token)
+    # Extract operator name (first argument, before any options)
     OP_NAME=$(echo "$INIT_ARGS" | awk '{print $1}')
 
-    # Extract pack name if provided
-    PACK_NAME=$(echo "$INIT_ARGS" | grep -oE '--pack[= ]\S+' | sed -E 's/--pack[= ]//')
-
-    # Default pack = beginner
-    if [[ -z "$PACK_NAME" ]]; then
-        PACK_NAME="beginner"
+    # Extract pack name using Bash regex (supports --pack beginner or --pack=beginner)
+    PACK_NAME="beginner"  # default
+    if [[ "$INIT_ARGS" =~ --pack[=\ ]([^[:space:]]+) ]]; then
+        PACK_NAME="${BASH_REMATCH[1]}"
     fi
 
-    # Run ork init
+    # Run init
     ork init $INIT_ARGS
 
-    # Construct paths
+    # Construct paths after init
     OP_ROOT="$OP_NAME"
     PACK_DIR="$OP_NAME/examples/$PACK_NAME"
-    KATALOG_PATH="$PACK_DIR/katalog.yaml"
+    GENERATED_KATALOG="$PACK_DIR/katalog.yaml"
 
-    # Outputs
+    # If no katalog was set before, use the generated one
+    if [[ -z "$KATALOG" ]]; then
+        KATALOG="$GENERATED_KATALOG"
+        echo "Using generated katalog: $KATALOG"
+    fi
+
     echo "init_dir=$OP_ROOT" >> "$GITHUB_OUTPUT"
     echo "operator_dir=$PACK_DIR" >> "$GITHUB_OUTPUT"
-    echo "katalog_path=$KATALOG_PATH" >> "$GITHUB_OUTPUT"
+    echo "katalog_path=$GENERATED_KATALOG" >> "$GITHUB_OUTPUT"
 
     echo "==> Operator initialized:"
     echo "    root:        $OP_ROOT"
     echo "    pack:        $PACK_NAME"
     echo "    examples:    $PACK_DIR"
-    echo "    katalog:     $KATALOG_PATH"
+    echo "    katalog:     $GENERATED_KATALOG"
 fi
-
 
 # -------------------------------
 # 6. ork validate
 # -------------------------------
 if [[ "$DO_VALIDATE" == "true" ]]; then
+    if [[ -z "$KATALOG" ]]; then
+        echo "ERROR: Cannot validate without a katalog file."
+        exit 1
+    fi
     echo "==> Running: ork validate"
     ork validate -k "$KATALOG" | tee "$OUTDIR/validate.log"
     echo "validate_log=$OUTDIR/validate.log" >> "$GITHUB_OUTPUT"
@@ -144,6 +152,10 @@ fi
 # 7. ork template
 # -------------------------------
 if [[ "$DO_TEMPLATE" == "true" ]]; then
+    if [[ -z "$KATALOG" ]]; then
+        echo "ERROR: Cannot template without a katalog file."
+        exit 1
+    fi
     echo "==> Running: ork template"
     mkdir -p "$OUTDIR/template"
     ork template -k "$KATALOG" -o "$OUTDIR/template"
@@ -154,6 +166,10 @@ fi
 # 8. ork generate rbac
 # -------------------------------
 if [[ "$DO_RBAC" == "true" ]]; then
+    if [[ -z "$KATALOG" ]]; then
+        echo "ERROR: Cannot generate RBAC without a katalog file."
+        exit 1
+    fi
     echo "==> Running: ork generate rbac"
     ork generate rbac -k "$KATALOG" -o "$OUTDIR/rbac.yaml"
     echo "rbac_file=$OUTDIR/rbac.yaml" >> "$GITHUB_OUTPUT"
@@ -163,6 +179,10 @@ fi
 # 9. ork generate configmap
 # -------------------------------
 if [[ "$DO_CONFIGMAP" == "true" ]]; then
+    if [[ -z "$KATALOG" ]]; then
+        echo "ERROR: Cannot generate ConfigMap without a katalog file."
+        exit 1
+    fi
     echo "==> Running: ork generate configmap"
     ork generate configmap -k "$KATALOG" -o "$OUTDIR/configmap.yaml"
     echo "configmap_file=$OUTDIR/configmap.yaml" >> "$GITHUB_OUTPUT"
@@ -172,6 +192,10 @@ fi
 # 10. ork generate bundle
 # -------------------------------
 if [[ "$DO_BUNDLE" == "true" ]]; then
+    if [[ -z "$KATALOG" ]]; then
+        echo "ERROR: Cannot generate bundle without a katalog file."
+        exit 1
+    fi
     echo "==> Running: ork generate bundle"
     ork generate bundle -k "$KATALOG" -o "$OUTDIR/bundle.yaml"
     echo "bundle_file=$OUTDIR/bundle.yaml" >> "$GITHUB_OUTPUT"
@@ -181,19 +205,17 @@ fi
 # 11. ork run (optional)
 # -------------------------------
 if [[ "$DO_RUN" == "true" ]]; then
+    if [[ -z "$KATALOG" ]]; then
+        echo "ERROR: Cannot run without a katalog file."
+        exit 1
+    fi
     echo "==> Running: ork run (timeout: ${RUN_TIMEOUT}s)"
-
     mkdir -p "$OUTDIR/run"
     RUN_LOG="$OUTDIR/run/ork-run.log"
-
-    # Start ork run in background
     ork run -k "$KATALOG" > "$RUN_LOG" 2>&1 &
     RUN_PID=$!
-
     echo "run_pid=$RUN_PID" >> "$GITHUB_OUTPUT"
     echo "run_log=$RUN_LOG" >> "$GITHUB_OUTPUT"
-
-    # Timeout loop
     SECONDS=0
     while kill -0 "$RUN_PID" 2>/dev/null; do
         if (( SECONDS >= RUN_TIMEOUT )); then
@@ -203,7 +225,6 @@ if [[ "$DO_RUN" == "true" ]]; then
         fi
         sleep 1
     done
-
     echo "==> ork run completed or stopped"
 fi
 
