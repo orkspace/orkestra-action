@@ -1,0 +1,51 @@
+name: Matrix E2E
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        katalog:
+          - katalogs/service-a/katalog.yaml
+          - katalogs/service-b/katalog.yaml
+          - katalogs/service-c/katalog.yaml
+        ork-version:
+          - v1.0.0
+          - v1.1.0
+          - latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate
+        id: validate
+        uses: orkspace/orkestra-action@v1
+        with:
+          katalog: ${{ matrix.katalog }}
+          ork-version: ${{ matrix.ork-version }}
+          validate: true
+
+      - name: Generate bundle
+        id: bundle
+        uses: orkspace/orkestra-action@v1
+        with:
+          katalog: ${{ matrix.katalog }}
+          ork-version: ${{ matrix.ork-version }}
+          generate-bundle: true
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+
+      - name: Apply Orkestra bundle
+        run: kubectl apply -f ${{ steps.bundle.outputs.bundle_file }}
+
+      - name: Install Orkestra Helm chart
+        run: helm install orkestra charts/orkestra

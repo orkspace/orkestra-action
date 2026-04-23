@@ -1,0 +1,84 @@
+name: "Orkestra CI"
+description: "Run Orkestra CLI commands in CI with versioned reproducibility"
+
+inputs:
+  katalog:
+    description: "Path to katalog.yaml or komposer.yaml"
+    required: false
+    default: ""
+
+  ork-version:
+    description: "Version of Ork CLI to use (e.g. v1.2.3, latest)"
+    required: false
+    default: "latest"
+
+  output-dir:
+    description: "Directory to write artifacts into"
+    required: false
+    default: "orkestra-artifacts"
+  
+  kompose:
+    description: "Run 'ork kompose' before other steps"
+    required: false
+    default: "false"
+
+  validate:
+    description: "Run 'ork validate'"
+    required: false
+    default: "false"
+
+  template:
+    description: "Run 'ork template'"
+    required: false
+    default: "false"
+
+  generate-rbac:
+    description: "Run 'ork generate rbac'"
+    required: false
+    default: "false"
+
+  generate-configmap:
+    description: "Run 'ork generate configmap'"
+    required: false
+    default: "false"
+
+  generate-bundle:
+    description: "Run 'ork generate bundle'"
+    required: false
+    default: "false"
+
+  init:
+    description: "Run 'ork init <args>'"
+    required: false
+    default: ""
+
+outputs:
+  komposed_katalog:
+    description: "Path to the komposed katalog.yaml"
+  validate_log:
+    description: "Path to validation log"
+  template_dir:
+    description: "Directory containing rendered templates"
+  rbac_file:
+    description: "Generated RBAC YAML file"
+  configmap_file:
+    description: "Generated ConfigMap YAML file"
+  bundle_file:
+    description: "Generated bundle YAML file"
+  init_dir:
+    description: "Directory containing generated example pack"
+
+runs:
+  using: "docker"
+  image: "Dockerfile"
+  args:
+    - ${{ inputs.katalog }}
+    - ${{ inputs.ork-version }}
+    - ${{ inputs.output-dir }}
+    - ${{ inputs.kompose }}
+    - ${{ inputs.validate }}
+    - ${{ inputs.template }}
+    - ${{ inputs.generate-rbac }}
+    - ${{ inputs.generate-configmap }}
+    - ${{ inputs.generate-bundle }}
+    - ${{ inputs.init }}

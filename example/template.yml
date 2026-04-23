@@ -1,0 +1,39 @@
+name: Template Komposed Katalog
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  template:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 1: Kompose the sources into a runtime katalog
+      - name: Kompose sources
+        id: kompose
+        uses: orkspace/orkestra-action@v1
+        with:
+          kompose: true
+
+      - name: Inspect komposed katalog
+        run: |
+          echo "Komposed katalog:"
+          ls -R ${{ steps.kompose.outputs.komposed_katalog_dir }}
+
+      # Step 2: Template the komposed katalog
+      - name: Template CRDs
+        id: template
+        uses: orkspace/orkestra-action@v1
+        with:
+          katalog: ${{ steps.kompose.outputs.komposed_katalog }}
+          template: true
+
+      - name: View template output
+        run: |
+          echo "Rendered CRDs:"
+          ls -R ${{ steps.template.outputs.template_dir }}

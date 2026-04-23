@@ -1,0 +1,84 @@
+name: Multi‑Environment GitOps Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  dev:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate Katalog
+        id: validate
+        uses: orkspace/orkestra-action@v1
+        with:
+          validate: true
+
+      - name: Generate dev bundle
+        id: bundle
+        uses: orkspace/orkestra-action@v1
+        with:
+          generate-bundle: true
+
+      - name: Commit bundle to dev GitOps repo
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Update dev bundle"
+          file_pattern: "bundles/dev.yaml"
+          repository: git@github.com:your-org/dev-gitops.git
+          commit_user_name: "Orkestra Bot"
+          commit_user_email: "bot@orkestra.dev"
+          commit_author: "Orkestra Bot <bot@orkestra.dev>"
+
+  staging:
+    needs: dev
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate staging bundle
+        id: bundle
+        uses: orkspace/orkestra-action@v1
+        with:
+          generate-bundle: true
+
+      - name: Commit bundle to staging GitOps repo
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Promote bundle to staging"
+          file_pattern: "bundles/staging.yaml"
+          repository: git@github.com:your-org/staging-gitops.git
+          commit_user_name: "Orkestra Bot"
+          commit_user_email: "bot@orkestra.dev"
+          commit_author: "Orkestra Bot <bot@orkestra.dev>"
+
+  production:
+    needs: staging
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate production bundle
+        id: bundle
+        uses: orkspace/orkestra-action@v1
+        with:
+          generate-bundle: true
+
+      - name: Commit bundle to production GitOps repo
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Promote bundle to production"
+          file_pattern: "bundles/production.yaml"
+          repository: git@github.com:your-org/prod-gitops.git
+          commit_user_name: "Orkestra Bot"
+          commit_user_email: "bot@orkestra.dev"
+          commit_author: "Orkestra Bot <bot@orkestra.dev>"

@@ -1,0 +1,29 @@
+name: Generate Orkestra Bundle
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate Katalog
+        id: validate
+        uses: orkspace/orkestra-action@v1
+        with:
+          validate: true
+
+      - name: Generate bundle
+        id: bundle
+        uses: orkspace/orkestra-action@v1
+        with:
+          generate-bundle: true
+
+      - name: Show bundle path
+        run: echo "Bundle: ${{ steps.bundle.outputs.bundle_file }}"
