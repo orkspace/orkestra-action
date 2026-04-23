@@ -1,7 +1,12 @@
 FROM ubuntu:22.04
 
 # Install required tools
-RUN apk add --no-cache curl bash ca-certificates
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        curl \
+        bash \
+        ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 # Directory where artifacts will be written
 WORKDIR /workspace
@@ -10,5 +15,4 @@ WORKDIR /workspace
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Default command
 ENTRYPOINT ["/entrypoint.sh"]
