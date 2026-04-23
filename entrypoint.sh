@@ -12,9 +12,6 @@ DO_CONFIGMAP="$8"
 DO_BUNDLE="$9"
 INIT_ARGS="${10}"
 
-
-ORKESTRA_RELEASES="https://raw.githubusercontent.com/iAlexeze/orkestra/refs/heads/main/install.sh"
-
 echo "==> Orkestra CI Action starting"
 
 # -------------------------------
@@ -37,9 +34,10 @@ echo "Using katalog: $KATALOG"
 # 2. Install Ork CLI version
 # -------------------------------
 echo "==> Installing Ork CLI version: $ORK_VERSION"
-curl -sSL "${ORKESTRA_RELEASES}" | ORK_VERSION="$ORK_VERSION" bash
 
-chmod +x /usr/local/bin/ork
+ORKESTRA_RELEASES="https://raw.githubusercontent.com/iAlexeze/orkestra/main/install.sh"
+
+curl -sSL "${ORKESTRA_RELEASES}" | ORK_VERSION="$ORK_VERSION" bash
 
 echo "Installed Ork version:"
 ork version || true
