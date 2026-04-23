@@ -79,8 +79,6 @@ outputs:
     description: "Root directory of the initialized operator"
   operator_dir:
     description: "Directory containing the expanded example pack (examples/<pack>)"
-  katalog_path:
-    description: "Path to the katalog.yaml inside the selected example pack"
 
 runs:
   using: "docker"

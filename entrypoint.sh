@@ -116,23 +116,14 @@ if [[ -n "$INIT_ARGS" ]]; then
     # Construct paths after init
     OP_ROOT="$OP_NAME"
     PACK_DIR="$OP_NAME/examples/$PACK_NAME"
-    GENERATED_KATALOG="$PACK_DIR/katalog.yaml"
-
-    # If no katalog was set before, use the generated one
-    if [[ -z "$KATALOG" ]]; then
-        KATALOG="$GENERATED_KATALOG"
-        echo "Using generated katalog: $KATALOG"
-    fi
 
     echo "init_dir=$OP_ROOT" >> "$GITHUB_OUTPUT"
     echo "operator_dir=$PACK_DIR" >> "$GITHUB_OUTPUT"
-    echo "katalog_path=$GENERATED_KATALOG" >> "$GITHUB_OUTPUT"
 
     echo "==> Operator initialized:"
     echo "    root:        $OP_ROOT"
     echo "    pack:        $PACK_NAME"
     echo "    examples:    $PACK_DIR"
-    echo "    katalog:     $GENERATED_KATALOG"
 fi
 
 # -------------------------------
