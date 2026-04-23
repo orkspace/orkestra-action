@@ -15,7 +15,52 @@ INIT_ARGS="${10}"
 echo "==> Orkestra CI Action starting"
 
 # -------------------------------
-# 1. Resolve katalog file
+# 0. Setup persistent cache directory
+# -------------------------------
+CACHE_DIR="${HOME}/.ork_cache"
+mkdir -p "$CACHE_DIR"
+export PATH="${CACHE_DIR}:$PATH"
+
+# -------------------------------
+# 1. Install Ork CLI (with caching)
+# -------------------------------
+install_ork() {
+    local version="$1"
+    echo "==> Installing Ork CLI version: ${version:-latest}"
+    ORKESTRA_RELEASES="https://raw.githubusercontent.com/ialexeze/orkestra/main/install.sh"
+
+    # Pass version (empty = latest) and custom install dir to install script
+    curl -sSL "${ORKESTRA_RELEASES}" | ORK_VERSION="$version" ORK_INSTALL_DIR="$CACHE_DIR" bash
+}
+
+# Check if ork is already available and matches requested version
+if command -v ork >/dev/null 2>&1; then
+    INSTALLED_VERSION=$(ork version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "")
+    REQ_VERSION="$ORK_VERSION"
+
+    if [[ "$REQ_VERSION" == "latest" ]]; then
+        # Always re‑install "latest" to ensure we have the most recent build
+        install_ork ""
+    elif [[ "$INSTALLED_VERSION" == "$REQ_VERSION" ]]; then
+        echo "Ork CLI $INSTALLED_VERSION already installed in cache, skipping download."
+    else
+        echo "Found ork $INSTALLED_VERSION, but requested $REQ_VERSION. Reinstalling."
+        install_ork "$REQ_VERSION"
+    fi
+else
+    # No ork found, perform fresh install
+    if [[ "$ORK_VERSION" == "latest" ]]; then
+        install_ork ""
+    else
+        install_ork "$ORK_VERSION"
+    fi
+fi
+
+echo "Using Ork version:"
+ork version || true
+
+# -------------------------------
+# 2. Resolve katalog file
 # -------------------------------
 if [[ -n "$KATALOG_INPUT" ]]; then
     KATALOG="$KATALOG_INPUT"
@@ -31,23 +76,6 @@ fi
 echo "Using katalog: $KATALOG"
 
 # -------------------------------
-# 2. Install Ork CLI version
-# -------------------------------
-echo "==> Installing Ork CLI version: $ORK_VERSION"
-
-# Normalize "latest" to empty string
-if [[ "$ORK_VERSION" == "latest" ]]; then
-    ORK_VERSION=""
-fi
-
-ORKESTRA_RELEASES="https://raw.githubusercontent.com/ialexeze/orkestra/main/install.sh"
-
-curl -sSL "${ORKESTRA_RELEASES}" | ORK_VERSION="$ORK_VERSION" bash
-
-echo "Installed Ork version:"
-ork version || true
-
-# -------------------------------
 # 3. Prepare output directory
 # -------------------------------
 mkdir -p "$OUTDIR"
@@ -60,7 +88,7 @@ if [[ "$DO_KOMPOSE" == "true" ]]; then
     mkdir -p "$OUTDIR/komposed"
     ork kompose -k "$KATALOG" -o "$OUTDIR/komposed/katalog.yaml"
     KATALOG="$OUTDIR/komposed/katalog.yaml"
-    echo "::set-output name=komposed_katalog::$KATALOG"
+    echo "komposed_katalog=$KATALOG" >> "$GITHUB_OUTPUT"
 fi
 
 # -------------------------------
@@ -69,7 +97,7 @@ fi
 if [[ -n "$INIT_ARGS" ]]; then
     echo "==> Running: ork init $INIT_ARGS"
     ork init $INIT_ARGS -o "$OUTDIR/init"
-    echo "::set-output name=init_dir::$OUTDIR/init"
+    echo "init_dir=$OUTDIR/init" >> "$GITHUB_OUTPUT"
 fi
 
 # -------------------------------
@@ -78,7 +106,7 @@ fi
 if [[ "$DO_VALIDATE" == "true" ]]; then
     echo "==> Running: ork validate"
     ork validate -k "$KATALOG" | tee "$OUTDIR/validate.log"
-    echo "::set-output name=validate_log::$OUTDIR/validate.log"
+    echo "validate_log=$OUTDIR/validate.log" >> "$GITHUB_OUTPUT"
 fi
 
 # -------------------------------
@@ -88,7 +116,7 @@ if [[ "$DO_TEMPLATE" == "true" ]]; then
     echo "==> Running: ork template"
     mkdir -p "$OUTDIR/template"
     ork template -k "$KATALOG" -o "$OUTDIR/template"
-    echo "::set-output name=template_dir::$OUTDIR/template"
+    echo "template_dir=$OUTDIR/template" >> "$GITHUB_OUTPUT"
 fi
 
 # -------------------------------
@@ -97,7 +125,7 @@ fi
 if [[ "$DO_RBAC" == "true" ]]; then
     echo "==> Running: ork generate rbac"
     ork generate rbac -k "$KATALOG" -o "$OUTDIR/rbac.yaml"
-    echo "::set-output name=rbac_file::$OUTDIR/rbac.yaml"
+    echo "rbac_file=$OUTDIR/rbac.yaml" >> "$GITHUB_OUTPUT"
 fi
 
 # -------------------------------
@@ -106,7 +134,7 @@ fi
 if [[ "$DO_CONFIGMAP" == "true" ]]; then
     echo "==> Running: ork generate configmap"
     ork generate configmap -k "$KATALOG" -o "$OUTDIR/configmap.yaml"
-    echo "::set-output name=configmap_file::$OUTDIR/configmap.yaml"
+    echo "configmap_file=$OUTDIR/configmap.yaml" >> "$GITHUB_OUTPUT"
 fi
 
 # -------------------------------
@@ -115,7 +143,7 @@ fi
 if [[ "$DO_BUNDLE" == "true" ]]; then
     echo "==> Running: ork generate bundle"
     ork generate bundle -k "$KATALOG" -o "$OUTDIR/bundle.yaml"
-    echo "::set-output name=bundle_file::$OUTDIR/bundle.yaml"
+    echo "bundle_file=$OUTDIR/bundle.yaml" >> "$GITHUB_OUTPUT"
 fi
 
 echo "==> Orkestra CI Action completed successfully"
