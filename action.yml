@@ -7,6 +7,16 @@ inputs:
     required: false
     default: ""
 
+  run:
+    description: "Run the Orkestra operator runtime"
+    required: false
+    default: "false"
+
+  run-timeout:
+    description: "Maximum number of seconds to allow ork run to execute before stopping"
+    required: false
+    default: "30"
+
   ork-version:
     description: "Version of Ork CLI to use (e.g. v1.2.3, latest)"
     required: false
@@ -82,3 +92,5 @@ runs:
     - ${{ inputs.generate-configmap }}
     - ${{ inputs.generate-bundle }}
     - ${{ inputs.init }}
+    - ${{ inputs.run }}
+    - ${{ inputs.run-timeout }}

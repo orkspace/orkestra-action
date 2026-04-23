@@ -11,6 +11,8 @@ DO_RBAC="$7"
 DO_CONFIGMAP="$8"
 DO_BUNDLE="$9"
 INIT_ARGS="${10}"
+DO_RUN="${11:-false}"
+RUN_TIMEOUT="${12:-30}"
 
 echo "==> Orkestra CI Action starting"
 
@@ -144,6 +146,36 @@ if [[ "$DO_BUNDLE" == "true" ]]; then
     echo "==> Running: ork generate bundle"
     ork generate bundle -k "$KATALOG" -o "$OUTDIR/bundle.yaml"
     echo "bundle_file=$OUTDIR/bundle.yaml" >> "$GITHUB_OUTPUT"
+fi
+
+# -------------------------------
+# 11. ork run (optional)
+# -------------------------------
+if [[ "$DO_RUN" == "true" ]]; then
+    echo "==> Running: ork run (timeout: ${RUN_TIMEOUT}s)"
+
+    mkdir -p "$OUTDIR/run"
+    RUN_LOG="$OUTDIR/run/ork-run.log"
+
+    # Start ork run in background
+    ork run -k "$KATALOG" > "$RUN_LOG" 2>&1 &
+    RUN_PID=$!
+
+    echo "run_pid=$RUN_PID" >> "$GITHUB_OUTPUT"
+    echo "run_log=$RUN_LOG" >> "$GITHUB_OUTPUT"
+
+    # Timeout loop
+    SECONDS=0
+    while kill -0 "$RUN_PID" 2>/dev/null; do
+        if (( SECONDS >= RUN_TIMEOUT )); then
+            echo "==> ork run timed out after ${RUN_TIMEOUT}s, stopping..."
+            kill "$RUN_PID" || true
+            break
+        fi
+        sleep 1
+    done
+
+    echo "==> ork run completed or stopped"
 fi
 
 echo "==> Orkestra CI Action completed successfully"
