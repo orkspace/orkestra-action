@@ -98,9 +98,38 @@ fi
 # -------------------------------
 if [[ -n "$INIT_ARGS" ]]; then
     echo "==> Running: ork init $INIT_ARGS"
-    ork init $INIT_ARGS -o "$OUTDIR/init"
-    echo "init_dir=$OUTDIR/init" >> "$GITHUB_OUTPUT"
+
+    # Extract operator name (first token)
+    OP_NAME=$(echo "$INIT_ARGS" | awk '{print $1}')
+
+    # Extract pack name if provided
+    PACK_NAME=$(echo "$INIT_ARGS" | grep -oE '--pack[= ]\S+' | sed -E 's/--pack[= ]//')
+
+    # Default pack = beginner
+    if [[ -z "$PACK_NAME" ]]; then
+        PACK_NAME="beginner"
+    fi
+
+    # Run ork init
+    ork init $INIT_ARGS
+
+    # Construct paths
+    OP_ROOT="$OP_NAME"
+    PACK_DIR="$OP_NAME/examples/$PACK_NAME"
+    KATALOG_PATH="$PACK_DIR/katalog.yaml"
+
+    # Outputs
+    echo "init_dir=$OP_ROOT" >> "$GITHUB_OUTPUT"
+    echo "operator_dir=$PACK_DIR" >> "$GITHUB_OUTPUT"
+    echo "katalog_path=$KATALOG_PATH" >> "$GITHUB_OUTPUT"
+
+    echo "==> Operator initialized:"
+    echo "    root:        $OP_ROOT"
+    echo "    pack:        $PACK_NAME"
+    echo "    examples:    $PACK_DIR"
+    echo "    katalog:     $KATALOG_PATH"
 fi
+
 
 # -------------------------------
 # 6. ork validate
