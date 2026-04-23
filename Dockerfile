@@ -1,4 +1,4 @@
-FROM alpine:3.19
+FROM ubuntu:22.04
 
 # Install required tools
 RUN apk add --no-cache curl bash ca-certificates
