@@ -3,17 +3,22 @@ description: "Run Orkestra CLI commands in CI with versioned reproducibility"
 
 inputs:
   katalog:
-    description: "Path to existing katalog.yaml or komposer.yaml (optional, if not provided, a new operator will be initialized)"
+    description: "Path to existing katalog.yaml or komposer.yaml (ignored if init=true)"
     required: false
     default: ""
 
+  init:
+    description: "Initialize a new operator using the specified pack and example-subdir"
+    required: false
+    default: "false"
+
   pack:
-    description: "Pack to use when initializing a new operator (beginner, intermediate, advanced, use-cases)"
+    description: "Pack to use when init=true (beginner, intermediate, advanced, use-cases)"
     required: false
     default: "beginner"
 
   example-subdir:
-    description: "Subdirectory under examples/<pack>/ containing the katalog, CRD, and CR (e.g., '01-hello-website')"
+    description: "Subdirectory under examples/<pack> containing the katalog, CRD, and CR (required if init=true)"
     required: false
     default: ""
 
@@ -71,23 +76,24 @@ outputs:
   bundle_file:
     description: "Generated bundle YAML file"
   init_dir:
-    description: "Root directory of the initialized operator"
+    description: "Root directory of the initialized operator (only if init=true)"
   operator_dir:
     description: "Directory containing the expanded example pack (examples/<pack>)"
   katalog_path:
-    description: "Path to the katalog.yaml file (after kompose/init)"
+    description: "Path to the katalog.yaml file (after init/kompose)"
   crd_path:
-    description: "Path to the CRD YAML file (after init)"
+    description: "Path to the CRD YAML file (only if init=true)"
   cr_path:
-    description: "Path to the CR YAML file (after init)"
+    description: "Path to the CR YAML file (only if init=true)"
   example_dir:
-    description: "Directory containing the chosen example (e.g., .../01-hello-website)"
+    description: "Directory containing the chosen example"
 
 runs:
   using: "docker"
   image: "Dockerfile"
   args:
     - ${{ inputs.katalog }}
+    - ${{ inputs.init }}
     - ${{ inputs.pack }}
     - ${{ inputs.example-subdir }}
     - ${{ inputs.ork-version }}

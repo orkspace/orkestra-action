@@ -2,16 +2,17 @@
 set -euo pipefail
 
 KATALOG_INPUT="$1"
-PACK_NAME="$2"
-EXAMPLE_SUBDIR="$3"
-ORK_VERSION="$4"
-OUTDIR="$5"
-DO_KOMPOSE="$6"
-DO_VALIDATE="$7"
-DO_TEMPLATE="$8"
-DO_RBAC="$9"
-DO_CONFIGMAP="${10}"
-DO_BUNDLE="${11}"
+DO_INIT="$2"
+PACK_NAME="$3"
+EXAMPLE_SUBDIR="$4"
+ORK_VERSION="$5"
+OUTDIR="$6"
+DO_KOMPOSE="$7"
+DO_VALIDATE="$8"
+DO_TEMPLATE="$9"
+DO_RBAC="${10}"
+DO_CONFIGMAP="${11}"
+DO_BUNDLE="${12}"
 
 OPERATOR_NAME="orkestra-operator"
 
@@ -57,31 +58,16 @@ echo "Using Ork version:"
 ork version || true
 
 # -------------------------------
-# 2. Determine katalog file (may be created via init)
+# 2. Initialize operator (if requested)
 # -------------------------------
 KATALOG=""
-NEEDS_INIT=false
-
-if [[ -n "$KATALOG_INPUT" ]]; then
-    KATALOG="$KATALOG_INPUT"
-elif [[ -f "katalog.yaml" ]]; then
-    KATALOG="katalog.yaml"
-elif [[ -f "komposer.yaml" ]]; then
-    KATALOG="komposer.yaml"
-else
-    NEEDS_INIT=true
-fi
-
-# -------------------------------
-# 3. Initialize operator if needed
-# -------------------------------
 CRD_PATH=""
 CR_PATH=""
 EXAMPLE_DIR=""
 OPERATOR_ROOT=""
 EXAMPLES_BASE=""
 
-if [[ "$NEEDS_INIT" == "true" ]]; then
+if [[ "$DO_INIT" == "true" ]]; then
     echo "==> Initializing operator: $OPERATOR_NAME with pack: $PACK_NAME"
     ork init "$OPERATOR_NAME" --pack "$PACK_NAME"
 
@@ -89,7 +75,7 @@ if [[ "$NEEDS_INIT" == "true" ]]; then
     EXAMPLES_BASE="$OPERATOR_NAME/examples/$PACK_NAME"
 
     if [[ -z "$EXAMPLE_SUBDIR" ]]; then
-        echo "ERROR: example-subdir is required when initializing a new operator"
+        echo "ERROR: example-subdir is required when init=true"
         exit 1
     fi
 
@@ -123,17 +109,27 @@ if [[ "$NEEDS_INIT" == "true" ]]; then
     echo "    example:     $EXAMPLE_SUBDIR"
     echo "    katalog:     $KATALOG"
 else
-    # If katalog provided without init, we still need to output katalog_path
+    # No init – we must have a katalog file
+    if [[ -n "$KATALOG_INPUT" ]]; then
+        KATALOG="$KATALOG_INPUT"
+    elif [[ -f "katalog.yaml" ]]; then
+        KATALOG="katalog.yaml"
+    elif [[ -f "komposer.yaml" ]]; then
+        KATALOG="komposer.yaml"
+    else
+        echo "ERROR: No katalog file found and init=false. Please provide katalog input or set init=true."
+        exit 1
+    fi
     echo "katalog_path=$KATALOG" >> "$GITHUB_OUTPUT"
 fi
 
 # -------------------------------
-# 4. Prepare output directory
+# 3. Prepare output directory
 # -------------------------------
 mkdir -p "$OUTDIR"
 
 # -------------------------------
-# 5. ork kompose (optional)
+# 4. ork kompose (optional)
 # -------------------------------
 if [[ "$DO_KOMPOSE" == "true" ]]; then
     if [[ -z "$KATALOG" ]]; then
@@ -145,10 +141,12 @@ if [[ "$DO_KOMPOSE" == "true" ]]; then
     ork kompose -k "$KATALOG" -o "$OUTDIR/komposed/katalog.yaml"
     KATALOG="$OUTDIR/komposed/katalog.yaml"
     echo "komposed_katalog=$KATALOG" >> "$GITHUB_OUTPUT"
+    # Update katalog_path output after kompose
+    echo "katalog_path=$KATALOG" >> "$GITHUB_OUTPUT"
 fi
 
 # -------------------------------
-# 6. ork validate
+# 5. ork validate
 # -------------------------------
 if [[ "$DO_VALIDATE" == "true" ]]; then
     if [[ -z "$KATALOG" ]]; then
@@ -161,7 +159,7 @@ if [[ "$DO_VALIDATE" == "true" ]]; then
 fi
 
 # -------------------------------
-# 7. ork template
+# 6. ork template
 # -------------------------------
 if [[ "$DO_TEMPLATE" == "true" ]]; then
     if [[ -z "$KATALOG" ]]; then
@@ -175,7 +173,7 @@ if [[ "$DO_TEMPLATE" == "true" ]]; then
 fi
 
 # -------------------------------
-# 8. ork generate rbac
+# 7. ork generate rbac
 # -------------------------------
 if [[ "$DO_RBAC" == "true" ]]; then
     if [[ -z "$KATALOG" ]]; then
@@ -188,7 +186,7 @@ if [[ "$DO_RBAC" == "true" ]]; then
 fi
 
 # -------------------------------
-# 9. ork generate configmap
+# 8. ork generate configmap
 # -------------------------------
 if [[ "$DO_CONFIGMAP" == "true" ]]; then
     if [[ -z "$KATALOG" ]]; then
@@ -201,7 +199,7 @@ if [[ "$DO_CONFIGMAP" == "true" ]]; then
 fi
 
 # -------------------------------
-# 10. ork generate bundle
+# 9. ork generate bundle
 # -------------------------------
 if [[ "$DO_BUNDLE" == "true" ]]; then
     if [[ -z "$KATALOG" ]]; then
