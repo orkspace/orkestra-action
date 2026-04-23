@@ -35,6 +35,11 @@ echo "Using katalog: $KATALOG"
 # -------------------------------
 echo "==> Installing Ork CLI version: $ORK_VERSION"
 
+# Normalize "latest" to empty string
+if [[ "$ORK_VERSION" == "latest" ]]; then
+    ORK_VERSION=""
+fi
+
 ORKESTRA_RELEASES="https://raw.githubusercontent.com/ialexeze/orkestra/main/install.sh"
 
 curl -sSL "${ORKESTRA_RELEASES}" | ORK_VERSION="$ORK_VERSION" bash
