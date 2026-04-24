@@ -26,7 +26,7 @@ Every run is reproducible.
 
 ---
 
-# Features
+## Features
 
 - Versioned Ork CLI (`ork-version` input)  
 - Auto-detects `katalog.yaml` or `komposer.yaml`  
@@ -38,7 +38,7 @@ Every run is reproducible.
 
 ---
 
-# Usage
+## Usage
 
 You can run the action in multiple small steps, or combine them.
 
@@ -46,7 +46,7 @@ All boolean inputs default to false.
 
 ---
 
-# Validate
+## Validate
 
 ```yaml
 - uses: orkestra/ci-action@v1
@@ -60,7 +60,7 @@ All boolean inputs default to false.
 
 ---
 
-# Template
+## Template
 
 ```yaml
 - uses: orkestra/ci-action@v1
@@ -74,7 +74,7 @@ All boolean inputs default to false.
 
 ---
 
-# Generate RBAC
+## Generate RBAC
 
 ```yaml
 - uses: orkestra/ci-action@v1
@@ -88,7 +88,7 @@ All boolean inputs default to false.
 
 ---
 
-# Generate ConfigMap
+## Generate ConfigMap
 
 ```yaml
 - uses: orkestra/ci-action@v1
@@ -99,7 +99,7 @@ All boolean inputs default to false.
 
 ---
 
-# Generate Bundle
+## Generate Bundle
 
 ```yaml
 - uses: orkestra/ci-action@v1
@@ -113,21 +113,22 @@ All boolean inputs default to false.
 
 ---
 
-# Init Example Pack
+## Init Example Pack
 
 ```yaml
 - uses: orkestra/ci-action@v1
   id: init
   with:
-    init: "my-operator --pack beginner"
+    init: true
+    example-subdir: beginner
 
 - name: Inspect example pack
-  run: ls -R ${{ steps.init.outputs.init_dir }}
+  run: ls -R ${{ steps.init.outputs.example_dir }}
 ```
 
 ---
 
-# Inputs
+## Inputs
 
 | Input | Default | Description |
 |-------|---------|-------------|
@@ -143,7 +144,7 @@ All boolean inputs default to false.
 
 ---
 
-# Outputs
+## Outputs
 
 These outputs can be consumed by later steps:
 
@@ -170,7 +171,7 @@ This keeps the action simple and predictable.
 
 ---
 
-# Example: Full E2E Pipeline
+## Example: Full E2E Pipeline
 
 ```yaml
 name: E2E
@@ -184,17 +185,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: orkestra/ci-action@v1
+      - name: Setup operator, validate katalog and generate bundle
+        id: ork
+        uses: orkspace/orkestra-action@v0.0.1
         with:
+          init: true
+          pack: beginner
+          example-subdir: 01-hello-website
           validate: true
-
-      - uses: orkestra/ci-action@v1
-        with:
-          template: true
-
-      - uses: orkestra/ci-action@v1
-        id: bundle
-        with:
           generate-bundle: true
 
       - name: Create kind cluster
@@ -209,7 +207,7 @@ jobs:
 
 ---
 
-# License
+## License
 [Apache 2.0.](./LICENSE)
 
 ---
