@@ -120,7 +120,8 @@ All boolean inputs default to false.
   id: init
   with:
     init: true
-    example-subdir: beginner
+    pack: beginner
+    example-subdir: 01-hello-website
 
 - name: Inspect example pack
   run: ls -R ${{ steps.init.outputs.example_dir }}
