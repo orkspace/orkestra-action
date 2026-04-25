@@ -18,7 +18,9 @@ jobs:
         id: init
         uses: orkspace/orkestra-action@v1
         with:
-          init: "my-operator --pack beginner"
+          init: true
+          pack: beginner
+          example-subdir: 01-hello-website
 
       # Step 2: Inspect the generated pack
       - name: Inspect example pack
