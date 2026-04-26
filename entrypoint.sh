@@ -247,14 +247,23 @@ if [[ "$DO_REGISTRY" == "true" ]]; then
         echo "ERROR: generate-registry requires init=true (operator must be generated)."
         exit 1
     fi
-    # Change to the operator root directory (where go.mod is)
     pushd "$OPERATOR_ROOT" > /dev/null
     echo "==> Running: ork generate registry -k \"$KATALOG_ABS\""
     ork generate registry -k "$KATALOG_ABS"
-    # The generated file is placed in ./pkg/runtime/zz_generated_runtime_registry.go relative to operator root
-    REGISTRY_FILE="$(pwd)/pkg/runtime/zz_generated_runtime_registry.go"
-    echo "registry_file=$REGISTRY_FILE" >> "$GITHUB_OUTPUT"
-    echo "Generated registry: $REGISTRY_FILE"
+    # Search for the generated file (it might be in pkg/runtime/ or elsewhere)
+    
+    echo "Contents of current directory"
+    ls -la || true
+
+    REGISTRY_FILE=$(find . -name "zz_generated_runtime_registry.go" -type f | head -1)
+    if [[ -z "$REGISTRY_FILE" ]]; then
+        echo "ERROR: Could not find generated registry file. Directory contents:"
+        ls -la pkg/ 2>/dev/null || echo "pkg directory not found"
+        exit 1
+    fi
+    REGISTRY_FILE_ABS=$(realpath "$REGISTRY_FILE")
+    echo "registry_file=$REGISTRY_FILE_ABS" >> "$GITHUB_OUTPUT"
+    echo "Generated registry: $REGISTRY_FILE_ABS"
     popd > /dev/null
 fi
 
