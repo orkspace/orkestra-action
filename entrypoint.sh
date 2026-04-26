@@ -247,17 +247,20 @@ if [[ "$DO_REGISTRY" == "true" ]]; then
         echo "ERROR: generate-registry requires init=true (operator must be generated)."
         exit 1
     fi
-    pushd "$OPERATOR_ROOT" > /dev/null
-    echo "==> Running: ork generate registry -k \"$KATALOG_ABS\""
-    ork generate registry -k "$KATALOG_ABS"
-    # Search for the generated file (it might be in pkg/runtime/ or elsewhere)
-    
-    echo "Contents of current directory"
-    ls -la || true
-
+    # The typed operator's module is inside the example subdirectory
+    if [[ ! -d "$EXAMPLE_DIR" ]]; then
+        echo "ERROR: Example directory not found: $EXAMPLE_DIR"
+        exit 1
+    fi
+    pushd "$EXAMPLE_DIR" > /dev/null
+    echo "==> Running: go mod tidy"
+    go mod tidy
+    echo "==> Running: ork generate registry -k katalog.yaml"
+    ork generate registry -k katalog.yaml
+    # Locate the generated file (should be pkg/runtime/zz_generated_runtime_registry.go)
     REGISTRY_FILE=$(find . -name "zz_generated_runtime_registry.go" -type f | head -1)
     if [[ -z "$REGISTRY_FILE" ]]; then
-        echo "ERROR: Could not find generated registry file. Directory contents:"
+        echo "ERROR: Could not find generated registry file."
         ls -la pkg/ 2>/dev/null || echo "pkg directory not found"
         exit 1
     fi
