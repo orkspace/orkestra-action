@@ -118,3 +118,5 @@ runs:
     - ${{ inputs.generate-rbac }}
     - ${{ inputs.generate-configmap }}
     - ${{ inputs.generate-bundle }}
+    - ${{ inputs.namespace }}
+    - ${{ inputs.generate-registry }}
