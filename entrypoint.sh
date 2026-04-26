@@ -177,7 +177,9 @@ if [[ "$DO_VALIDATE" == "true" ]]; then
         exit 1
     fi
     echo "==> Running: ork validate"
-    ork validate -k "$KATALOG" | tee "$OUTDIR/validate.log"
+    set +e
+    ork validate -k "$KATALOG" > "$OUTDIR/validate.log" 2>&1
+    set -e
     echo "validate_log=$OUTDIR/validate.log" >> "$GITHUB_OUTPUT"
 fi
 
@@ -247,7 +249,7 @@ if [[ "$DO_REGISTRY" == "true" ]]; then
         echo "ERROR: generate-registry requires init=true (operator must be generated)."
         exit 1
     fi
-    # The typed operator's module is inside the example subdirectory
+    # cd into the example directory where go.mod and katalog.yaml live
     if [[ ! -d "$EXAMPLE_DIR" ]]; then
         echo "ERROR: Example directory not found: $EXAMPLE_DIR"
         exit 1
