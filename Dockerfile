@@ -1,14 +1,8 @@
-FROM ubuntu:22.04
+FROM golang:1.22-alpine3.20
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        curl \
-        bash \
-        ca-certificates \
-        golang-go && \
-    rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache bash curl
 
-WORKDIR /workspace
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
 ENTRYPOINT ["/entrypoint.sh"]
