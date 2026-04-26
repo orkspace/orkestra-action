@@ -243,13 +243,19 @@ if [[ "$DO_REGISTRY" == "true" ]]; then
         echo "ERROR: Cannot generate registry without a katalog file."
         exit 1
     fi
-    echo "==> Running: ork generate registry -k \"$KATALOG\""
-    ork generate registry -k "$KATALOG"
-    # Determine the registry file path. The command writes to pkg/runtime/zz_generated_runtime_registry.go
-    # relative to the current working directory (which is the repo root).
+    if [[ "$DO_INIT" != "true" ]]; then
+        echo "ERROR: generate-registry requires init=true (operator must be generated)."
+        exit 1
+    fi
+    # Change to the operator root directory (where go.mod is)
+    pushd "$OPERATOR_ROOT" > /dev/null
+    echo "==> Running: ork generate registry -k \"$KATALOG_ABS\""
+    ork generate registry -k "$KATALOG_ABS"
+    # The generated file is placed in ./pkg/runtime/zz_generated_runtime_registry.go relative to operator root
     REGISTRY_FILE="$(pwd)/pkg/runtime/zz_generated_runtime_registry.go"
     echo "registry_file=$REGISTRY_FILE" >> "$GITHUB_OUTPUT"
     echo "Generated registry: $REGISTRY_FILE"
+    popd > /dev/null
 fi
 
 echo "==> Orkestra CI Action completed successfully"
