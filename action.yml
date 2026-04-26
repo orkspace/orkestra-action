@@ -56,9 +56,19 @@ inputs:
     description: "Run 'ork generate configmap'"
     required: false
     default: "false"
+  
+  namespace:
+    description: "Kubernetes namespace for the generated bundle (default: orkestra-system)"
+    required: false
+    default: "orkestra-system"
 
   generate-bundle:
     description: "Run 'ork generate bundle'"
+    required: false
+    default: "false"
+  
+  generate-registry:
+    description: "Run 'ork generate registry' for typed operators"
     required: false
     default: "false"
 
@@ -87,6 +97,10 @@ outputs:
     description: "Path to the CR YAML file (only if init=true)"
   example_dir:
     description: "Directory containing the chosen example"
+  namespace:
+    description: "Kubernetes namespace used for generated resources (default: orkestra-system)"
+  registry_file:
+    description: "Path to the generated registry file (pkg/runtime/zz_generated_runtime_registry.go)"
 
 runs:
   using: "docker"

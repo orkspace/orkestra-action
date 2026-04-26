@@ -13,6 +13,12 @@ DO_TEMPLATE="$9"
 DO_RBAC="${10}"
 DO_CONFIGMAP="${11}"
 DO_BUNDLE="${12}"
+NAMESPACE="${13}"
+DO_REGISTRY="${14}"
+
+# Set default namespace if not provided
+TARGET_NAMESPACE="${NAMESPACE:-orkestra-system}"
+echo "Using namespace: $TARGET_NAMESPACE"
 
 OPERATOR_NAME="orkestra-operator"
 
@@ -66,6 +72,7 @@ CR_PATH=""
 EXAMPLE_DIR=""
 OPERATOR_ROOT=""
 EXAMPLES_BASE=""
+KATALOG_ABS=""
 
 if [[ "$DO_INIT" == "true" ]]; then
     echo "==> Initializing operator: $OPERATOR_NAME with pack: $PACK_NAME"
@@ -96,9 +103,17 @@ if [[ "$DO_INIT" == "true" ]]; then
         exit 1
     fi
 
+    # Convert to absolute path for later use
+    if command -v realpath >/dev/null 2>&1; then
+        KATALOG_ABS=$(realpath "$KATALOG")
+    else
+        KATALOG_ABS=$(cd "$(dirname "$KATALOG")" && pwd)/$(basename "$KATALOG")
+    fi
+
     echo "init_dir=$OPERATOR_ROOT" >> "$GITHUB_OUTPUT"
     echo "operator_dir=$OPERATOR_ROOT" >> "$GITHUB_OUTPUT"
     echo "katalog_path=$KATALOG" >> "$GITHUB_OUTPUT"
+    echo "katalog_abs=$KATALOG_ABS" >> "$GITHUB_OUTPUT"
     echo "crd_path=$CRD_PATH" >> "$GITHUB_OUTPUT"
     echo "cr_path=$CR_PATH" >> "$GITHUB_OUTPUT"
     echo "example_dir=$EXAMPLE_DIR" >> "$GITHUB_OUTPUT"
@@ -108,6 +123,7 @@ if [[ "$DO_INIT" == "true" ]]; then
     echo "    pack:        $PACK_NAME"
     echo "    example:     $EXAMPLE_SUBDIR"
     echo "    katalog:     $KATALOG"
+    echo "    katalog_abs: $KATALOG_ABS"
 else
     # No init – we must have a katalog file
     if [[ -n "$KATALOG_INPUT" ]]; then
@@ -120,7 +136,14 @@ else
         echo "ERROR: No katalog file found and init=false. Please provide katalog input or set init=true."
         exit 1
     fi
+    # Convert to absolute path
+    if command -v realpath >/dev/null 2>&1; then
+        KATALOG_ABS=$(realpath "$KATALOG")
+    else
+        KATALOG_ABS=$(cd "$(dirname "$KATALOG")" && pwd)/$(basename "$KATALOG")
+    fi
     echo "katalog_path=$KATALOG" >> "$GITHUB_OUTPUT"
+    echo "katalog_abs=$KATALOG_ABS" >> "$GITHUB_OUTPUT"
 fi
 
 # -------------------------------
@@ -193,8 +216,8 @@ if [[ "$DO_CONFIGMAP" == "true" ]]; then
         echo "ERROR: Cannot generate ConfigMap without a katalog file."
         exit 1
     fi
-    echo "==> Running: ork generate configmap"
-    ork generate configmap -k "$KATALOG" -o "$OUTDIR/configmap.yaml"
+    echo "==> Running: ork generate configmap -k \"$KATALOG\" -o \"$OUTDIR/configmap.yaml\" -n \"$TARGET_NAMESPACE\""
+    ork generate configmap -k "$KATALOG" -o "$OUTDIR/configmap.yaml" -n "$TARGET_NAMESPACE"
     echo "configmap_file=$OUTDIR/configmap.yaml" >> "$GITHUB_OUTPUT"
 fi
 
@@ -206,9 +229,27 @@ if [[ "$DO_BUNDLE" == "true" ]]; then
         echo "ERROR: Cannot generate bundle without a katalog file."
         exit 1
     fi
-    echo "==> Running: ork generate bundle"
-    ork generate bundle -k "$KATALOG" -o "$OUTDIR/bundle.yaml"
+    echo "==> Running: ork generate bundle -k \"$KATALOG\" -o \"$OUTDIR/bundle.yaml\" -n \"$TARGET_NAMESPACE\""
+    ork generate bundle -k "$KATALOG" -o "$OUTDIR/bundle.yaml" -n "$TARGET_NAMESPACE"
     echo "bundle_file=$OUTDIR/bundle.yaml" >> "$GITHUB_OUTPUT"
+    echo "namespace=$TARGET_NAMESPACE" >> "$GITHUB_OUTPUT"
+fi
+
+# -------------------------------
+# 10. ork generate registry (typed mode)
+# -------------------------------
+if [[ "$DO_REGISTRY" == "true" ]]; then
+    if [[ -z "$KATALOG" ]]; then
+        echo "ERROR: Cannot generate registry without a katalog file."
+        exit 1
+    fi
+    echo "==> Running: ork generate registry -k \"$KATALOG\""
+    ork generate registry -k "$KATALOG"
+    # Determine the registry file path. The command writes to pkg/runtime/zz_generated_runtime_registry.go
+    # relative to the current working directory (which is the repo root).
+    REGISTRY_FILE="$(pwd)/pkg/runtime/zz_generated_runtime_registry.go"
+    echo "registry_file=$REGISTRY_FILE" >> "$GITHUB_OUTPUT"
+    echo "Generated registry: $REGISTRY_FILE"
 fi
 
 echo "==> Orkestra CI Action completed successfully"
