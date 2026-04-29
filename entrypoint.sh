@@ -14,7 +14,15 @@ DO_RBAC="${10:-false}"
 DO_CONFIGMAP="${11:-false}"
 DO_BUNDLE="${12:-false}"
 NAMESPACE="${13:-orkestra-system}"
-DO_REGISTRY="${14:-false}"
+DO_REGISTRY="${14:-false}"      # generate registry
+
+# Orkestra registry arguments
+REGISTRY_SERVER="${15:-ghcr.io}"
+REGISTRY_USERNAME="${16:-}"
+REGISTRY_PASSWORD="${17:-}"
+REGISTRY_COMMAND="${18:-}"
+REGISTRY_REF="${19:-}"
+REGISTRY_DIR="${20:-}"
 
 # Set default namespace if not provided
 TARGET_NAMESPACE="${NAMESPACE:-orkestra-system}"
@@ -270,6 +278,39 @@ if [[ "$DO_REGISTRY" == "true" ]]; then
     echo "registry_file=$REGISTRY_FILE_ABS" >> "$GITHUB_OUTPUT"
     echo "Generated registry: $REGISTRY_FILE_ABS"
     popd > /dev/null
+fi
+
+# -------------------------------
+# 11. Registry operations (optional)
+# -------------------------------
+if [[ -n "$REGISTRY_COMMAND" ]]; then
+    # Login if credentials provided
+    if [[ -n "$REGISTRY_USERNAME" && -n "$REGISTRY_PASSWORD" ]]; then
+        echo "$REGISTRY_PASSWORD" | docker login "$REGISTRY_SERVER" -u "$REGISTRY_USERNAME" --password-stdin
+    fi
+
+    case "$REGISTRY_COMMAND" in
+        push)
+            if [[ -z "$REGISTRY_REF" || -z "$REGISTRY_DIR" ]]; then
+                echo "ERROR: registry push requires registry-ref and registry-dir"
+                exit 1
+            fi
+            ork registry push "$REGISTRY_REF" "$REGISTRY_DIR"
+            ;;
+        pull)
+            ork registry pull "$REGISTRY_REF"
+            ;;
+        info)
+            ork registry info "$REGISTRY_REF"
+            ;;
+        list)
+            ork registry list "${REGISTRY_SERVER}"
+            ;;
+        *)
+            echo "ERROR: unknown registry-command $REGISTRY_COMMAND"
+            exit 1
+            ;;
+    esac
 fi
 
 echo "==> Orkestra CI Action completed successfully"
