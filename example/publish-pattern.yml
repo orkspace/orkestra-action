@@ -1,0 +1,33 @@
+name: Publish Operator Pattern
+
+on:
+  workflow_dispatch:
+    inputs:
+      pattern-ref:
+        description: "Pattern reference (e.g., myorg/website:1.0.0)"
+        required: true
+      registry-server:
+        description: "OCI registry server (default: ghcr.io)"
+        required: false
+        default: "ghcr.io"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push pattern
+        uses: orkspace/orkestra-action@v1
+        with:
+          registry-command: push
+          registry-ref: ${{ github.event.inputs.pattern-ref }}
+          pattern-dir: .   # use current directory (must contain katalog.yaml + crd.yaml)
+          registry-server: ${{ github.event.inputs.registry-server }}
+          registry-username: ${{ secrets.REGISTRY_USER }}
+          registry-password: ${{ secrets.REGISTRY_TOKEN }}
+
+# Usage:
+#   - Set REGISTRY_USER and REGISTRY_TOKEN as repository secrets.
+#   - Run workflow manually, provide pattern reference (e.g., workspace/website:v1).
+#   - The pattern directory (current checkout) must contain katalog.yaml and crd.yaml.

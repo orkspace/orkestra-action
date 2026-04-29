@@ -19,6 +19,7 @@ Use it to:
 - Produce outputs for downstream steps  
 - Build GitOps pipelines  
 - Power E2E tests  
+- Publish Operator Patterns
 
 Every step is optional.  
 Every output is consumable.  
@@ -110,6 +111,23 @@ All boolean inputs default to false.
 - name: Apply bundle
   run: kubectl apply -f ${{ steps.bundle.outputs.bundle_file }}
 ```
+
+---
+
+## Publish Pattern
+
+```yaml
+- uses: orkestra/ci-action@v1
+  id: publish
+  with:
+    registry-command: push
+    registry-ref: myorg/website:1.0.0
+    pattern-dir: test/my-operator       # Defaults to current working directory
+    registry-username: ${{ secrets.REGISTRY_USER }}
+    registry-password: ${{ secrets.REGISTRY_TOKEN }}
+```
+
+Pushes the current directory (must contain `katalog.yaml` and `crd.yaml`) as an OCI pattern to the default registry (`ghcr.io`). Override `registry-server` if needed.
 
 ---
 

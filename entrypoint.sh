@@ -22,7 +22,7 @@ REGISTRY_USERNAME="${16:-}"
 REGISTRY_PASSWORD="${17:-}"
 REGISTRY_COMMAND="${18:-}"
 REGISTRY_REF="${19:-}"
-REGISTRY_DIR="${20:-}"
+PATTERN_DIR="${20:-}"
 
 # Set default namespace if not provided
 TARGET_NAMESPACE="${NAMESPACE:-orkestra-system}"
@@ -291,23 +291,43 @@ if [[ -n "$REGISTRY_COMMAND" ]]; then
 
     case "$REGISTRY_COMMAND" in
         push)
-            if [[ -z "$REGISTRY_REF" || -z "$REGISTRY_DIR" ]]; then
-                echo "ERROR: registry push requires registry-ref and registry-dir"
+            PATTERN_DIR="${REGISTRY_DIR:-.}"
+            if [[ -z "$REGISTRY_REF" ]]; then
+                echo "ERROR: registry push requires registry-ref"
                 exit 1
             fi
-            ork registry push "$REGISTRY_REF" "$REGISTRY_DIR"
+            if [[ ! -d "$PATTERN_DIR" ]]; then
+                echo "ERROR: Pattern directory not found: $PATTERN_DIR"
+                exit 1
+            fi
+            # Change to pattern directory before push
+            pushd "$PATTERN_DIR" > /dev/null
+            echo "==> Pushing pattern $REGISTRY_REF from $(pwd)"
+            ork registry push "$REGISTRY_REF" .
+            popd > /dev/null
             ;;
         pull)
+            if [[ -z "$REGISTRY_REF" ]]; then
+                echo "ERROR: registry pull requires registry-ref"
+                exit 1
+            fi
+            echo "==> Pulling pattern $REGISTRY_REF"
             ork registry pull "$REGISTRY_REF"
             ;;
         info)
+            if [[ -z "$REGISTRY_REF" ]]; then
+                echo "ERROR: registry info requires registry-ref"
+                exit 1
+            fi
+            echo "==> Getting info for $REGISTRY_REF"
             ork registry info "$REGISTRY_REF"
             ;;
         list)
-            ork registry list "${REGISTRY_SERVER}"
+            echo "==> Listing patterns in $REGISTRY_SERVER"
+            ork registry list "$REGISTRY_SERVER"
             ;;
         *)
-            echo "ERROR: unknown registry-command $REGISTRY_COMMAND"
+            echo "ERROR: unknown registry-command '$REGISTRY_COMMAND'"
             exit 1
             ;;
     esac
