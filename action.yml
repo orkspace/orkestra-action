@@ -91,7 +91,7 @@ inputs:
   registry-ref:
     description: "Pattern reference (e.g., website:1.0.0)"
     required: false
-  registry-dir:
+  pattern-dir:
     description: "Directory to push (for push command)"
     required: false
 
@@ -147,4 +147,4 @@ runs:
     - ${{ inputs.registry-password }}
     - ${{ inputs.registry-command }}
     - ${{ inputs.registry-ref }}
-    - ${{ inputs.registry-dir }}
+    - ${{ inputs.pattern-dir }}
