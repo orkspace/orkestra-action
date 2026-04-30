@@ -343,16 +343,16 @@ if [[ -n "$REGISTRY_COMMAND" ]]; then
                 exit 1
             fi
             echo "==> Pulling pattern $REGISTRY_REF"
-            # Capture output to extract cache path
             PULL_OUT=$(mktemp)
             if ork registry pull "$REGISTRY_REF" 2>&1 | tee "$PULL_OUT"; then
-                # Extract the cache directory from output line like "→ /home/.../latest"
-                CACHE_PATH=$(grep -oE '→\s+(/[^ ]+)' "$PULL_OUT" | head -1 | awk '{print $2}')
+                # Extract cache path from "Cached at /path"
+                CACHE_PATH=$(grep -oE 'Cached at\s+(/[^ ]+)' "$PULL_OUT" | head -1 | awk '{print $3}')
                 if [[ -n "$CACHE_PATH" ]]; then
                     echo "pattern_path=$CACHE_PATH" >> "$GITHUB_OUTPUT"
                     echo "Cached at: $CACHE_PATH"
+                else
+                    echo "⚠️ Could not determine cache path from output, but pull succeeded."
                 fi
-                # Write summary
                 {
                     echo "## 📥 Pattern pulled: $REGISTRY_REF"
                     if [[ -n "$CACHE_PATH" ]]; then
@@ -364,13 +364,13 @@ if [[ -n "$REGISTRY_COMMAND" ]]; then
                     echo '```'
                 } >> "$GITHUB_STEP_SUMMARY"
             else
-                # Pull failed
                 {
                     echo "## ❌ Failed to pull pattern: $REGISTRY_REF"
                     echo '```'
                     cat "$PULL_OUT"
                     echo '```'
                 } >> "$GITHUB_STEP_SUMMARY"
+                rm -f "$PULL_OUT"
                 exit 1
             fi
             rm -f "$PULL_OUT"
