@@ -342,46 +342,25 @@ if [[ -n "$REGISTRY_COMMAND" ]]; then
                 echo "ERROR: registry pull requires registry-ref"
                 exit 1
             fi
-            echo "==> Pulling pattern $REGISTRY_REF"
-            PULL_OUT=$(mktemp)
-            if ork registry pull "$REGISTRY_REF" 2>&1 | tee "$PULL_OUT"; then
-                # Extract the container cache path
-                CACHE_PATH=$(grep -oE 'Cached at\s+(/[^ ]+)' "$PULL_OUT" | head -1 | awk '{print $3}')
-                if [[ -n "$CACHE_PATH" ]]; then
-                    # Create a workspace directory for the pulled pattern
-                    WORKSPACE_OUTPUT="${GITHUB_WORKSPACE:-/github/workspace}/pulled-$(basename "$REGISTRY_REF" | tr ':' '_')"
-                    mkdir -p "$WORKSPACE_OUTPUT"
-                    # Copy the pattern files (katalog.yaml, crd.yaml, etc.) to workspace
-                    cp -r "$CACHE_PATH"/* "$WORKSPACE_OUTPUT"/
-                    echo "pattern_path=$WORKSPACE_OUTPUT" >> "$GITHUB_OUTPUT"
-                    echo "Copied pattern to workspace: $WORKSPACE_OUTPUT"
-                else
-                    echo "⚠️ Could not determine cache path, but pull succeeded."
-                    # Fallback: try to find the pattern in the cache by reference (optional)
-                fi
-                # Write summary (same as before)
+            WORKSPACE_OUTPUT="${GITHUB_WORKSPACE:-/github/workspace}/pulled-$(basename "$REGISTRY_REF" | tr ':' '_')"
+            mkdir -p "$WORKSPACE_OUTPUT"
+            echo "==> Pulling pattern $REGISTRY_REF to $WORKSPACE_OUTPUT"
+            if ork registry pull "$REGISTRY_REF" --out "$WORKSPACE_OUTPUT"; then
+                echo "pattern_path=$WORKSPACE_OUTPUT" >> "$GITHUB_OUTPUT"
                 {
                     echo "## 📥 Pattern pulled: $REGISTRY_REF"
-                    if [[ -n "$CACHE_PATH" ]]; then
-                        echo "**Local cache:** \`$CACHE_PATH\`"
-                        echo "**Workspace copy:** \`$WORKSPACE_OUTPUT\`"
-                        echo
-                    fi
+                    echo "**Extracted to:** \`$WORKSPACE_OUTPUT\`"
+                    echo
                     echo '```'
-                    cat "$PULL_OUT"
+                    ls -la "$WORKSPACE_OUTPUT"
                     echo '```'
                 } >> "$GITHUB_STEP_SUMMARY"
             else
                 {
                     echo "## ❌ Failed to pull pattern: $REGISTRY_REF"
-                    echo '```'
-                    cat "$PULL_OUT"
-                    echo '```'
                 } >> "$GITHUB_STEP_SUMMARY"
-                rm -f "$PULL_OUT"
                 exit 1
             fi
-            rm -f "$PULL_OUT"
             ;;
         info)
             if [[ -z "$REGISTRY_REF" ]]; then
