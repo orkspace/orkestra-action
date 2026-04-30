@@ -343,20 +343,20 @@ if [[ -n "$REGISTRY_COMMAND" ]]; then
                 exit 1
             fi
 
-            # Construct patternpath for output
             PATTERN_NAME=$(basename "$REGISTRY_REF" | cut -d ':' -f 1)
-            WORKSPACE_OUTPUT="${GITHUB_WORKSPACE}/pulled-${PATTERN_NAME}"
+            RELATIVE_PATH="pulled-${PATTERN_NAME}"
+            FULL_PATH="${GITHUB_WORKSPACE}/${RELATIVE_PATH}"
 
-            mkdir -p "$WORKSPACE_OUTPUT"
-            echo "==> Pulling pattern $REGISTRY_REF to $WORKSPACE_OUTPUT"
-            if ork registry pull "$REGISTRY_REF" --out "$WORKSPACE_OUTPUT"; then
-                echo "pattern_path=$WORKSPACE_OUTPUT" >> "$GITHUB_OUTPUT"
+            mkdir -p "$FULL_PATH"
+            echo "==> Pulling pattern $REGISTRY_REF to $FULL_PATH"
+            if ork registry pull "$REGISTRY_REF" --out "$FULL_PATH"; then
+                echo "pattern_path=$RELATIVE_PATH" >> "$GITHUB_OUTPUT"
                 {
                     echo "## 📥 Pattern pulled: $REGISTRY_REF"
-                    echo "**Extracted to:** \`$WORKSPACE_OUTPUT\`"
+                    echo "**Extracted to:** \`$RELATIVE_PATH\`"
                     echo
                     echo '```'
-                    ls -la "$WORKSPACE_OUTPUT"
+                    ls -la "$FULL_PATH"
                     echo '```'
                 } >> "$GITHUB_STEP_SUMMARY"
             else
