@@ -324,8 +324,18 @@ if [[ -n "$REGISTRY_COMMAND" ]]; then
             # Change to pattern directory before push
             pushd "$PATTERN_DIR" > /dev/null
             echo "==> Pushing pattern $REGISTRY_REF from $(pwd)"
-            ork registry push "$REGISTRY_REF" .
-            popd > /dev/null
+            if ork registry push "$REGISTRY_REF" .; then
+                popd > /dev/null
+                {
+                    echo "## ✅ Pattern published successfully"
+                    echo '```'
+                    ork registry info "$REGISTRY_REF"
+                    echo '```'
+                } >> "$GITHUB_STEP_SUMMARY"
+            else
+                popd > /dev/null
+                exit 1
+            fi
             ;;
         pull)
             if [[ -z "$REGISTRY_REF" ]]; then
@@ -333,7 +343,37 @@ if [[ -n "$REGISTRY_COMMAND" ]]; then
                 exit 1
             fi
             echo "==> Pulling pattern $REGISTRY_REF"
-            ork registry pull "$REGISTRY_REF"
+            # Capture output to extract cache path
+            PULL_OUT=$(mktemp)
+            if ork registry pull "$REGISTRY_REF" 2>&1 | tee "$PULL_OUT"; then
+                # Extract the cache directory from output line like "→ /home/.../latest"
+                CACHE_PATH=$(grep -oE '→\s+(/[^ ]+)' "$PULL_OUT" | head -1 | awk '{print $2}')
+                if [[ -n "$CACHE_PATH" ]]; then
+                    echo "pattern_path=$CACHE_PATH" >> "$GITHUB_OUTPUT"
+                    echo "Cached at: $CACHE_PATH"
+                fi
+                # Write summary
+                {
+                    echo "## 📥 Pattern pulled: $REGISTRY_REF"
+                    if [[ -n "$CACHE_PATH" ]]; then
+                        echo "**Local cache:** \`$CACHE_PATH\`"
+                        echo
+                    fi
+                    echo '```'
+                    cat "$PULL_OUT"
+                    echo '```'
+                } >> "$GITHUB_STEP_SUMMARY"
+            else
+                # Pull failed
+                {
+                    echo "## ❌ Failed to pull pattern: $REGISTRY_REF"
+                    echo '```'
+                    cat "$PULL_OUT"
+                    echo '```'
+                } >> "$GITHUB_STEP_SUMMARY"
+                exit 1
+            fi
+            rm -f "$PULL_OUT"
             ;;
         info)
             if [[ -z "$REGISTRY_REF" ]]; then

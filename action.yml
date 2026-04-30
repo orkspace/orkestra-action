@@ -124,6 +124,9 @@ outputs:
     description: "Kubernetes namespace used for generated resources (default: orkestra-system)"
   registry_file:
     description: "Path to the generated registry file (pkg/runtime/zz_generated_runtime_registry.go)"
+  pattern_path:
+    description: "Local filesystem path to the pulled pattern (for pull command)"
+
 runs:
   using: "docker"
   image: "Dockerfile"

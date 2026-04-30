@@ -151,15 +151,26 @@ Pushes the current directory (must contain `katalog.yaml` and `crd.yaml`) as an 
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `katalog` | auto-detect | Path to katalog.yaml or komposer.yaml |
+| `katalog` | "" | Path to existing `katalog.yaml` or `komposer.yaml` (ignored if `init=true`) |
+| `init` | false | Initialize a new operator using the specified pack and example-subdir |
+| `pack` | beginner | Pack to use when `init=true` (`beginner`, `intermediate`, `advanced`, `use-cases`) |
+| `example-subdir` | "" | Subdirectory under `examples/<pack>` containing the katalog, CRD, and CR (required if `init=true`) |
 | `ork-version` | latest | Version of Ork CLI to install |
-| `output-dir` | orkestra-artifacts | Directory for generated files |
+| `output-dir` | orkestra-artifacts | Directory to write generated artifacts into |
+| `kompose` | false | Run `ork kompose` before other steps |
 | `validate` | false | Run `ork validate` |
 | `template` | false | Run `ork template` |
 | `generate-rbac` | false | Run `ork generate rbac` |
 | `generate-configmap` | false | Run `ork generate configmap` |
+| `namespace` | orkestra-system | Kubernetes namespace for generated resources |
 | `generate-bundle` | false | Run `ork generate bundle` |
-| `init` | "" | Run `ork init <args>` |
+| `generate-registry` | false | Run `ork generate registry` for typed operators |
+| `registry-server` | ghcr.io | OCI registry server |
+| `registry-username` | "" | Username for registry login |
+| `registry-password` | "" | Password or token for registry login |
+| `registry-command` | "" | Registry command to run (`push`, `pull`, `info`, `list`) |
+| `registry-ref` | "" | Pattern reference (e.g., `website:1.0.0`) |
+| `pattern-dir` | "" | Directory to push when using `registry-command=push` |
 
 ---
 
@@ -169,12 +180,21 @@ These outputs can be consumed by later steps:
 
 | Output | Description |
 |--------|-------------|
+| `komposed_katalog` | Path to the komposed `katalog.yaml` |
 | `validate_log` | Path to validation log |
-| `template_dir` | Directory of rendered templates |
-| `rbac_file` | Generated RBAC YAML |
-| `configmap_file` | Generated ConfigMap YAML |
-| `bundle_file` | Generated bundle YAML |
-| `init_dir` | Directory containing example pack |
+| `template_dir` | Directory containing rendered templates |
+| `rbac_file` | Generated RBAC YAML file |
+| `configmap_file` | Generated ConfigMap YAML file |
+| `bundle_file` | Generated bundle YAML file |
+| `init_dir` | Root directory of the initialized operator (only if `init=true`) |
+| `operator_dir` | Directory containing the expanded example pack (`examples/<pack>`) |
+| `katalog_path` | Path to the `katalog.yaml` file (after init/kompose) |
+| `crd_path` | Path to the CRD YAML file (only if `init=true`) |
+| `cr_path` | Path to the CR YAML file (only if `init=true`) |
+| `example_dir` | Directory containing the chosen example |
+| `namespace` | Kubernetes namespace used for generated resources (default: `orkestra-system`) |
+| `registry_file` | Path to the generated registry file (`pkg/runtime/zz_generated_runtime_registry.go`) |
+| `pattern_path` | Local filesystem path to the pulled pattern (for `pull` command) |
 
 ---
 
