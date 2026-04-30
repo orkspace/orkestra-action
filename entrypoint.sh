@@ -345,18 +345,26 @@ if [[ -n "$REGISTRY_COMMAND" ]]; then
             echo "==> Pulling pattern $REGISTRY_REF"
             PULL_OUT=$(mktemp)
             if ork registry pull "$REGISTRY_REF" 2>&1 | tee "$PULL_OUT"; then
-                # Extract cache path from "Cached at /path"
+                # Extract the container cache path
                 CACHE_PATH=$(grep -oE 'Cached at\s+(/[^ ]+)' "$PULL_OUT" | head -1 | awk '{print $3}')
                 if [[ -n "$CACHE_PATH" ]]; then
-                    echo "pattern_path=$CACHE_PATH" >> "$GITHUB_OUTPUT"
-                    echo "Cached at: $CACHE_PATH"
+                    # Create a workspace directory for the pulled pattern
+                    WORKSPACE_OUTPUT="${GITHUB_WORKSPACE:-/github/workspace}/pulled-$(basename "$REGISTRY_REF" | tr ':' '_')"
+                    mkdir -p "$WORKSPACE_OUTPUT"
+                    # Copy the pattern files (katalog.yaml, crd.yaml, etc.) to workspace
+                    cp -r "$CACHE_PATH"/* "$WORKSPACE_OUTPUT"/
+                    echo "pattern_path=$WORKSPACE_OUTPUT" >> "$GITHUB_OUTPUT"
+                    echo "Copied pattern to workspace: $WORKSPACE_OUTPUT"
                 else
-                    echo "⚠️ Could not determine cache path from output, but pull succeeded."
+                    echo "⚠️ Could not determine cache path, but pull succeeded."
+                    # Fallback: try to find the pattern in the cache by reference (optional)
                 fi
+                # Write summary (same as before)
                 {
                     echo "## 📥 Pattern pulled: $REGISTRY_REF"
                     if [[ -n "$CACHE_PATH" ]]; then
                         echo "**Local cache:** \`$CACHE_PATH\`"
+                        echo "**Workspace copy:** \`$WORKSPACE_OUTPUT\`"
                         echo
                     fi
                     echo '```'
