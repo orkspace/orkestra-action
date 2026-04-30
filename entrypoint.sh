@@ -26,7 +26,6 @@ PATTERN_DIR="${20:-}"
 
 # Set default namespace if not provided
 TARGET_NAMESPACE="${NAMESPACE:-orkestra-system}"
-echo "Using namespace: $TARGET_NAMESPACE"
 
 OPERATOR_NAME="orkestra-operator"
 
@@ -227,6 +226,7 @@ if [[ "$DO_RBAC" == "true" ]]; then
         echo "ERROR: Cannot generate RBAC without a katalog file."
         exit 1
     fi
+    echo "Using namespace: $TARGET_NAMESPACE"
     echo "==> Running: ork generate rbac"
     ork generate rbac -k "$KATALOG" -o "$OUTDIR/rbac.yaml"
     echo "rbac_file=$OUTDIR/rbac.yaml" >> "$GITHUB_OUTPUT"
@@ -240,6 +240,7 @@ if [[ "$DO_CONFIGMAP" == "true" ]]; then
         echo "ERROR: Cannot generate ConfigMap without a katalog file."
         exit 1
     fi
+    echo "Using namespace: $TARGET_NAMESPACE"
     echo "==> Running: ork generate configmap -k \"$KATALOG\" -o \"$OUTDIR/configmap.yaml\" -n \"$TARGET_NAMESPACE\""
     ork generate configmap -k "$KATALOG" -o "$OUTDIR/configmap.yaml" -n "$TARGET_NAMESPACE"
     echo "configmap_file=$OUTDIR/configmap.yaml" >> "$GITHUB_OUTPUT"
@@ -253,6 +254,7 @@ if [[ "$DO_BUNDLE" == "true" ]]; then
         echo "ERROR: Cannot generate bundle without a katalog file."
         exit 1
     fi
+    echo "Using namespace: $TARGET_NAMESPACE"
     echo "==> Running: ork generate bundle -k \"$KATALOG\" -o \"$OUTDIR/bundle.yaml\" -n \"$TARGET_NAMESPACE\""
     ork generate bundle -k "$KATALOG" -o "$OUTDIR/bundle.yaml" -n "$TARGET_NAMESPACE"
     echo "bundle_file=$OUTDIR/bundle.yaml" >> "$GITHUB_OUTPUT"
@@ -300,7 +302,12 @@ fi
 if [[ -n "$REGISTRY_COMMAND" ]]; then
     # Login if credentials provided
     if [[ -n "$REGISTRY_USERNAME" && -n "$REGISTRY_PASSWORD" ]]; then
-        echo "$REGISTRY_PASSWORD" | docker login "$REGISTRY_SERVER" -u "$REGISTRY_USERNAME" --password-stdin
+        if echo "$REGISTRY_PASSWORD" | docker login "$REGISTRY_SERVER" -u "$REGISTRY_USERNAME" --password-stdin >/dev/null 2>&1; then
+            echo "✅ Logged in to $REGISTRY_SERVER"
+        else
+            echo "❌ Failed to log in to $REGISTRY_SERVER"
+            exit 1
+        fi
     fi
 
     case "$REGISTRY_COMMAND" in
