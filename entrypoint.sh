@@ -32,43 +32,57 @@ OPERATOR_NAME="orkestra-operator"
 
 echo "==> Orkestra CI Action starting"
 
-# -------------------------------
-# 0. Setup persistent cache directory
-# -------------------------------
-CACHE_DIR="${HOME}/.ork_cache"
+# ────────────────────────────────────────────────────────────────────────────
+# 0. Persistent cache
+#
+# $GITHUB_WORKSPACE is bind-mounted into every Docker action container in the
+# same job, so files written here survive across consecutive steps.
+# $HOME is container-local and resets on every step — do NOT use it for cache.
+# ────────────────────────────────────────────────────────────────────────────
+CACHE_DIR="${GITHUB_WORKSPACE:-/github/workspace}/.ork_cache"
 mkdir -p "$CACHE_DIR"
 export PATH="${CACHE_DIR}:$PATH"
 
-# -------------------------------
-# 1. Install Ork CLI (with caching)
-# -------------------------------
-install_ork() {
-    local version="$1"
-    echo "==> Installing Ork CLI version: ${version:-latest}"
-    ORKESTRA_RELEASES="https://raw.githubusercontent.com/ialexeze/orkestra/main/install.sh"
-    curl -sSL "${ORKESTRA_RELEASES}" | ORK_VERSION="$version" ORK_INSTALL_DIR="$CACHE_DIR" bash
+# ────────────────────────────────────────────────────────────────────────────
+# 1. Install Ork CLI (cached by resolved version)
+#
+# "latest" is resolved to a concrete tag before the cache check so that two
+# consecutive steps requesting "latest" both hit the same cached binary.
+# ────────────────────────────────────────────────────────────────────────────
+INSTALL_SH="https://raw.githubusercontent.com/orkspace/orkestra/main/install.sh"
+
+resolve_ork_version() {
+    curl -sSf "https://api.github.com/repos/orkspace/orkestra/releases/latest" \
+        | grep '"tag_name"' \
+        | sed -E 's/.*"tag_name": "([^"]+)".*/\1/'
 }
 
-if command -v ork >/dev/null 2>&1; then
-    INSTALLED_VERSION=$(ork version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "")
-    REQ_VERSION="$ORK_VERSION"
-    if [[ "$REQ_VERSION" == "latest" ]]; then
-        install_ork ""
-    elif [[ "$INSTALLED_VERSION" == "$REQ_VERSION" ]]; then
-        echo "Ork CLI $INSTALLED_VERSION already installed in cache, skipping download."
-    else
-        echo "Found ork $INSTALLED_VERSION, but requested $REQ_VERSION. Reinstalling."
-        install_ork "$REQ_VERSION"
-    fi
-else
-    if [[ "$ORK_VERSION" == "latest" ]]; then
-        install_ork ""
-    else
-        install_ork "$ORK_VERSION"
-    fi
+RESOLVED_VERSION="$ORK_VERSION"
+if [[ "$ORK_VERSION" == "latest" || -z "$ORK_VERSION" ]]; then
+    echo "==> Resolving latest ork version..."
+    RESOLVED_VERSION=$(resolve_ork_version)
+    echo "    → $RESOLVED_VERSION"
 fi
 
-echo "Using Ork version:"
+CACHED_VERSION=""
+if [[ -x "${CACHE_DIR}/ork" ]]; then
+    CACHED_VERSION=$("${CACHE_DIR}/ork" version 2>/dev/null \
+        | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "")
+fi
+
+if [[ -n "$CACHED_VERSION" && "$CACHED_VERSION" == "$RESOLVED_VERSION" ]]; then
+    echo "==> ork ${RESOLVED_VERSION} already cached — skipping download"
+else
+    echo "==> Installing ork ${RESOLVED_VERSION}..."
+    curl -sSL "$INSTALL_SH" \
+        | ORK_VERSION="$RESOLVED_VERSION" \
+          ORK_INSTALL_DIR="$CACHE_DIR" \
+          ORK_SKIP_CC=true \
+          ORK_SKIP_COMPLETION=true \
+          bash
+fi
+
+echo "==> Using ork version:"
 ork version || true
 
 # -------------------------------
