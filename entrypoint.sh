@@ -305,7 +305,7 @@ if [[ -n "$REGISTRY_COMMAND" ]]; then
 
     case "$REGISTRY_COMMAND" in
         push)
-            PATTERN_DIR="${REGISTRY_DIR:-.}"
+            PATTERN_DIR="${PATTERN_DIR:-.}"
             if [[ -z "$REGISTRY_REF" ]]; then
                 echo "ERROR: registry push requires registry-ref"
                 exit 1
