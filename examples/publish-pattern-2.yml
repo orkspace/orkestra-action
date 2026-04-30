@@ -1,0 +1,56 @@
+name: Publish Operator Pattern
+
+on:
+  workflow_dispatch:
+    inputs:
+      pack:
+        description: "Orkestra pack (beginner, advanced, etc.)"
+        required: true
+        default: "beginner"
+      example-subdir:
+        description: "Example subdirectory (e.g., 01-hello-website)"
+        required: true
+      pattern-name:
+        description: "Pattern name (e.g., website)"
+        required: true
+      pattern-version:
+        description: "Pattern version (e.g., 1.0.0)"
+        required: true
+      registry-server:
+        description: "OCI registry server (default: ghcr.io)"
+        required: false
+        default: "ghcr.io"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Log in to the registry using a token (GitHub token for GHCR)
+      - name: Log in to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ github.event.inputs.registry-server }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Scaffold and validate the operator pattern
+      - name: Build pattern
+        id: build
+        uses: orkspace/orkestra-action@v1
+        with:
+          init: true
+          pack: ${{ github.event.inputs.pack }}
+          example-subdir: ${{ github.event.inputs.example-subdir }}
+          validate: true
+
+      # Push the pattern to the OCI registry
+      - name: Push pattern
+        uses: orkspace/orkestra-action@v1
+        with:
+          registry-command: push
+          registry-ref: ${{ github.event.inputs.pattern-name }}:${{ github.event.inputs.pattern-version }}
+          pattern-dir: ${{ steps.build.outputs.example_dir }}
+          registry-server: ${{ github.event.inputs.registry-server }}
