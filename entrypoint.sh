@@ -342,7 +342,11 @@ if [[ -n "$REGISTRY_COMMAND" ]]; then
                 echo "ERROR: registry pull requires registry-ref"
                 exit 1
             fi
-            WORKSPACE_OUTPUT="${GITHUB_WORKSPACE:-/github/workspace}/pulled-$(basename "$REGISTRY_REF" | tr ':' '_')"
+
+            # Construct patternpath for output
+            PATTERN_NAME=$(basename "$REGISTRY_REF" | cut -d ':' -f 1)
+            WORKSPACE_OUTPUT="${GITHUB_WORKSPACE}/pulled-${PATTERN_NAME}"
+
             mkdir -p "$WORKSPACE_OUTPUT"
             echo "==> Pulling pattern $REGISTRY_REF to $WORKSPACE_OUTPUT"
             if ork registry pull "$REGISTRY_REF" --out "$WORKSPACE_OUTPUT"; then
