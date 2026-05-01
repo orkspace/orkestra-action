@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine3.20
+FROM 1.26.2-alpine3.22
 
 # coreutils  → GNU sha256sum (supports --check; BusyBox only has -c)
 # docker-cli → docker login for ork registry push
