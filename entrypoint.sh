@@ -182,7 +182,7 @@ if [[ "$DO_KOMPOSE" == "true" ]]; then
     fi
     echo "==> Running: ork kompose"
     mkdir -p "$OUTDIR/komposed"
-    ork kompose -k "$KATALOG" -o "$OUTDIR/komposed/katalog.yaml"
+    ork kompose -f "$KATALOG" -o "$OUTDIR/komposed/katalog.yaml"
     KATALOG="$OUTDIR/komposed/katalog.yaml"
     echo "komposed_katalog=$KATALOG" >> "$GITHUB_OUTPUT"
     # Update katalog_path output after kompose
@@ -199,7 +199,7 @@ if [[ "$DO_VALIDATE" == "true" ]]; then
     fi
     echo "==> Running: ork validate"
     set +e
-    ork validate -k "$KATALOG" > "$OUTDIR/validate.log" 2>&1
+    ork validate -f "$KATALOG" > "$OUTDIR/validate.log" 2>&1
     set -e
     echo "validate_log=$OUTDIR/validate.log" >> "$GITHUB_OUTPUT"
 fi
@@ -214,7 +214,7 @@ if [[ "$DO_TEMPLATE" == "true" ]]; then
     fi
     echo "==> Running: ork template"
     mkdir -p "$OUTDIR/template"
-    ork template -k "$KATALOG" -o "$OUTDIR/template"
+    ork template -f "$KATALOG" -o "$OUTDIR/template"
     echo "template_dir=$OUTDIR/template" >> "$GITHUB_OUTPUT"
 fi
 
@@ -228,7 +228,7 @@ if [[ "$DO_RBAC" == "true" ]]; then
     fi
     echo "Using namespace: $TARGET_NAMESPACE"
     echo "==> Running: ork generate rbac"
-    ork generate rbac -k "$KATALOG" -o "$OUTDIR/rbac.yaml"
+    ork generate rbac -f "$KATALOG" -o "$OUTDIR/rbac.yaml"
     echo "rbac_file=$OUTDIR/rbac.yaml" >> "$GITHUB_OUTPUT"
 fi
 
@@ -241,8 +241,8 @@ if [[ "$DO_CONFIGMAP" == "true" ]]; then
         exit 1
     fi
     echo "Using namespace: $TARGET_NAMESPACE"
-    echo "==> Running: ork generate configmap -k \"$KATALOG\" -o \"$OUTDIR/configmap.yaml\" -n \"$TARGET_NAMESPACE\""
-    ork generate configmap -k "$KATALOG" -o "$OUTDIR/configmap.yaml" -n "$TARGET_NAMESPACE"
+    echo "==> Running: ork generate configmap -f \"$KATALOG\" -o \"$OUTDIR/configmap.yaml\" -n \"$TARGET_NAMESPACE\""
+    ork generate configmap -f "$KATALOG" -o "$OUTDIR/configmap.yaml" -n "$TARGET_NAMESPACE"
     echo "configmap_file=$OUTDIR/configmap.yaml" >> "$GITHUB_OUTPUT"
 fi
 
@@ -255,8 +255,8 @@ if [[ "$DO_BUNDLE" == "true" ]]; then
         exit 1
     fi
     echo "Using namespace: $TARGET_NAMESPACE"
-    echo "==> Running: ork generate bundle -k \"$KATALOG\" -o \"$OUTDIR/bundle.yaml\" -n \"$TARGET_NAMESPACE\""
-    ork generate bundle -k "$KATALOG" -o "$OUTDIR/bundle.yaml" -n "$TARGET_NAMESPACE"
+    echo "==> Running: ork generate bundle -f \"$KATALOG\" -o \"$OUTDIR/bundle.yaml\" -n \"$TARGET_NAMESPACE\""
+    ork generate bundle -f "$KATALOG" -o "$OUTDIR/bundle.yaml" -n "$TARGET_NAMESPACE"
     echo "bundle_file=$OUTDIR/bundle.yaml" >> "$GITHUB_OUTPUT"
     echo "namespace=$TARGET_NAMESPACE" >> "$GITHUB_OUTPUT"
 fi
@@ -281,8 +281,8 @@ if [[ "$DO_REGISTRY" == "true" ]]; then
     pushd "$EXAMPLE_DIR" > /dev/null
     echo "==> Running: go mod tidy"
     go mod tidy
-    echo "==> Running: ork generate registry -k katalog.yaml"
-    ork generate registry -k katalog.yaml
+    echo "==> Running: ork generate registry -f katalog.yaml"
+    ork generate registry -f katalog.yaml
     # Locate the generated file (should be pkg/runtime/zz_generated_runtime_registry.go)
     REGISTRY_FILE=$(find . -name "zz_generated_runtime_registry.go" -type f | head -1)
     if [[ -z "$REGISTRY_FILE" ]]; then
