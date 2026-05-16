@@ -1,23 +1,189 @@
-name: "Orkestra E2E"
-description: "Run Orkestra E2E tests — installs ork and runs ork e2e"
+name: "Orkestra"
+description: "Install the ork CLI and run any ork command — validate, plan, template, generate, e2e, registry"
 
 inputs:
-  e2e-file:
-    description: "Path to the e2e.yaml spec file"
-    required: false
-    default: "e2e.yaml"
   ork-version:
-    description: "Ork CLI version to install (default: latest)"
+    description: "Version of the ork CLI to install (e.g. v1.2.3 or latest)"
     required: false
     default: "latest"
-  keep-cluster:
-    description: "Keep the kind cluster after the test completes"
+
+  working-directory:
+    description: "Directory to run commands in. Defaults to the repository root."
     required: false
-    default: "false"
-  cluster:
-    description: "Use an existing kubectl context instead of creating a cluster"
+    default: "."
+
+  # ── validate ────────────────────────────────────────────────────────────────
+  validate:
+    description: "Path to a Katalog, Komposer, Motif, or E2E file to validate. Skip if empty."
     required: false
     default: ""
+
+  # ── plan ────────────────────────────────────────────────────────────────────
+  plan:
+    description: "Path to katalog.yaml to diff against the deployed Katalog. Skip if empty."
+    required: false
+    default: ""
+  plan-bundle:
+    description: "Path to a bundle.yaml file. Reads the deployed Katalog from it — no cluster access needed."
+    required: false
+    default: ""
+  plan-cm:
+    description: "Path to a configmap.yaml file. Reads the deployed Katalog from it — no cluster access needed."
+    required: false
+    default: ""
+  plan-namespace:
+    description: "Namespace of the deployed Katalog ConfigMap — only used when neither plan-bundle nor plan-cm is set."
+    required: false
+    default: "orkestra-system"
+  plan-output:
+    description: "File to write the plan diff output to."
+    required: false
+    default: "plan.txt"
+
+  # ── template ─────────────────────────────────────────────────────────────────
+  template:
+    description: "Path to katalog.yaml to render the fully-expanded runtime Katalog from. Skip if empty."
+    required: false
+    default: ""
+  template-yaml-output:
+    description: "Output file for the YAML-rendered Katalog (ork template --yaml)."
+    required: false
+    default: "template.yaml"
+  template-json-output:
+    description: "Output file for the JSON-rendered Katalog (ork template --json)."
+    required: false
+    default: "template.json"
+
+  # ── generate bundle ─────────────────────────────────────────────────────────
+  generate-bundle:
+    description: "Path to katalog.yaml to generate a complete installation bundle from. Skip if empty."
+    required: false
+    default: ""
+  generate-bundle-output:
+    description: "Output file for the generated bundle."
+    required: false
+    default: "bundle.yaml"
+  generate-bundle-namespace:
+    description: "Kubernetes namespace for the bundle."
+    required: false
+    default: "orkestra-system"
+
+  # ── generate configmap ──────────────────────────────────────────────────────
+  generate-configmap:
+    description: "Path to katalog.yaml or komposer.yaml to generate a ConfigMap from. Skip if empty."
+    required: false
+    default: ""
+  generate-configmap-output:
+    description: "Output file for the generated ConfigMap."
+    required: false
+    default: "configmap.yaml"
+  generate-configmap-namespace:
+    description: "Kubernetes namespace for the ConfigMap."
+    required: false
+    default: "orkestra-system"
+
+  # ── generate rbac ───────────────────────────────────────────────────────────
+  generate-rbac:
+    description: "Path to katalog.yaml to generate RBAC from. Skip if empty."
+    required: false
+    default: ""
+  generate-rbac-output:
+    description: "Output file for the generated RBAC ClusterRole."
+    required: false
+    default: "rbac.yaml"
+  generate-rbac-namespace:
+    description: "Kubernetes namespace for the RBAC ServiceAccount."
+    required: false
+    default: "orkestra-system"
+
+  # ── generate registry (typed operators) ─────────────────────────────────────
+  generate-registry:
+    description: "Comma-separated list of project directories to generate runtime registries for. Skip if empty."
+    required: false
+    default: ""
+
+  # ── e2e ─────────────────────────────────────────────────────────────────────
+  e2e:
+    description: "Path to the e2e.yaml spec file. Skip if empty."
+    required: false
+    default: ""
+  e2e-keep-cluster:
+    description: "Keep the kind cluster after e2e completes (useful for debugging)."
+    required: false
+    default: "false"
+  e2e-cluster:
+    description: "Use an existing kubectl context instead of creating a new cluster."
+    required: false
+    default: ""
+
+  # ── registry push ───────────────────────────────────────────────────────────
+  registry-push:
+    description: "Push a pattern to the registry. Value: 'name:version /path/to/dir' or just '/path/to/dir'. Skip if empty."
+    required: false
+    default: ""
+  registry-push-force:
+    description: "Force push even if e2e fails or metadata version differs."
+    required: false
+    default: "false"
+  registry-push-no-e2e:
+    description: "Skip the e2e gate when pushing (even if e2e.yaml is present)."
+    required: false
+    default: "false"
+  registry-url:
+    description: "OCI registry URL (e.g. ghcr.io/myorg/patterns). Also read from ORK_REGISTRY env var."
+    required: false
+    default: ""
+  registry-username:
+    description: "Registry username for authentication."
+    required: false
+    default: ""
+  registry-password:
+    description: "Registry password or token for authentication."
+    required: false
+    default: ""
+
+  # ── registry pull ───────────────────────────────────────────────────────────
+  registry-pull:
+    description: "Pull a pattern from the registry. Value: 'name:version'. Skip if empty."
+    required: false
+    default: ""
+  registry-pull-out:
+    description: "Directory to extract the pulled pattern into."
+    required: false
+    default: ""
+
+outputs:
+  # ── plan ────────────────────────────────────────────────────────────────────
+  plan-file:
+    description: "Path to the plan diff output file."
+    value: ${{ steps.plan.outputs.file }}
+
+  # ── template ─────────────────────────────────────────────────────────────────
+  template-yaml-file:
+    description: "Path to the YAML-rendered runtime Katalog."
+    value: ${{ steps.template.outputs.yaml-file }}
+  template-json-file:
+    description: "Path to the JSON-rendered runtime Katalog."
+    value: ${{ steps.template.outputs.json-file }}
+
+  # ── generate ────────────────────────────────────────────────────────────────
+  bundle-file:
+    description: "Path to the generated bundle.yaml file."
+    value: ${{ steps.generate-bundle.outputs.file }}
+  configmap-file:
+    description: "Path to the generated configmap.yaml file."
+    value: ${{ steps.generate-configmap.outputs.file }}
+  rbac-file:
+    description: "Path to the generated rbac.yaml file."
+    value: ${{ steps.generate-rbac.outputs.file }}
+  registry-file:
+    description: "Path to the generated zz_generated_runtime_registry.go file."
+    value: ${{ steps.generate-registry.outputs.file }}
+
+  # ── registry pull ────────────────────────────────────────────────────────────
+  pattern-path:
+    description: "Local path where the pulled pattern was extracted."
+    value: ${{ steps.registry-pull.outputs.path }}
 
 runs:
   using: "composite"
@@ -29,11 +195,127 @@ runs:
           | ORK_VERSION=${{ inputs.ork-version }} bash
         echo "$HOME/.orkestra/bin" >> $GITHUB_PATH
 
-    - name: Run E2E
+    - name: Registry login
+      if: inputs.registry-username != '' && inputs.registry-password != ''
       shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        echo "${{ inputs.registry-password }}" \
+          | docker login ${{ inputs.registry-url || 'ghcr.io' }} \
+              -u "${{ inputs.registry-username }}" --password-stdin
+
+    - name: Validate
+      if: inputs.validate != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: ork validate -f "${{ inputs.validate }}"
+
+    - name: Plan
+      id: plan
+      if: inputs.plan != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        if [[ -n "${{ inputs.plan-bundle }}" ]]; then
+          ork plan -f "${{ inputs.plan }}" --bundle "${{ inputs.plan-bundle }}" | tee "${{ inputs.plan-output }}"
+        elif [[ -n "${{ inputs.plan-cm }}" ]]; then
+          ork plan -f "${{ inputs.plan }}" --cm "${{ inputs.plan-cm }}" | tee "${{ inputs.plan-output }}"
+        else
+          echo "Error: plan requires either plan-bundle or plan-cm" >&2
+          exit 1
+        fi
+        echo "file=${{ inputs.working-directory }}/${{ inputs.plan-output }}" >> $GITHUB_OUTPUT
+
+    - name: Template
+      id: template
+      if: inputs.template != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        ork template -f "${{ inputs.template }}" --yaml -o "${{ inputs.template-yaml-output }}"
+        ork template -f "${{ inputs.template }}" --json -o "${{ inputs.template-json-output }}"
+        echo "yaml-file=${{ inputs.working-directory }}/${{ inputs.template-yaml-output }}" >> $GITHUB_OUTPUT
+        echo "json-file=${{ inputs.working-directory }}/${{ inputs.template-json-output }}" >> $GITHUB_OUTPUT
+
+    - name: Generate bundle
+      id: generate-bundle
+      if: inputs.generate-bundle != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        ork generate bundle \
+          -f "${{ inputs.generate-bundle }}" \
+          -o "${{ inputs.generate-bundle-output }}" \
+          -n "${{ inputs.generate-bundle-namespace }}"
+        echo "file=${{ inputs.working-directory }}/${{ inputs.generate-bundle-output }}" >> $GITHUB_OUTPUT
+
+    - name: Generate configmap
+      id: generate-configmap
+      if: inputs.generate-configmap != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        ork generate configmap \
+          -f "${{ inputs.generate-configmap }}" \
+          -o "${{ inputs.generate-configmap-output }}" \
+          -n "${{ inputs.generate-configmap-namespace }}"
+        echo "file=${{ inputs.working-directory }}/${{ inputs.generate-configmap-output }}" >> $GITHUB_OUTPUT
+
+    - name: Generate RBAC
+      id: generate-rbac
+      if: inputs.generate-rbac != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        ork generate rbac \
+          -f "${{ inputs.generate-rbac }}" \
+          -o "${{ inputs.generate-rbac-output }}" \
+          -n "${{ inputs.generate-rbac-namespace }}"
+        echo "file=${{ inputs.working-directory }}/${{ inputs.generate-rbac-output }}" >> $GITHUB_OUTPUT
+
+    - name: Generate registry
+      id: generate-registry
+      if: inputs.generate-registry != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        ork generate registry -d "${{ inputs.generate-registry }}"
+        FIRST_DIR=$(echo "${{ inputs.generate-registry }}" | cut -d',' -f1 | xargs)
+        echo "file=${{ inputs.working-directory }}/${FIRST_DIR}/pkg/runtime/zz_generated_runtime_registry.go" >> $GITHUB_OUTPUT
+
+    - name: E2E
+      if: inputs.e2e != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
       run: |
         KEEP=""
         CLUSTER=""
-        [[ "${{ inputs.keep-cluster }}" == "true" ]] && KEEP="--keep-cluster"
-        [[ -n "${{ inputs.cluster }}" ]] && CLUSTER="--cluster ${{ inputs.cluster }}"
-        ork e2e -f "${{ inputs.e2e-file }}" $KEEP $CLUSTER
+        [[ "${{ inputs.e2e-keep-cluster }}" == "true" ]] && KEEP="--keep-cluster"
+        [[ -n "${{ inputs.e2e-cluster }}" ]] && CLUSTER="--cluster ${{ inputs.e2e-cluster }}"
+        ork e2e -f "${{ inputs.e2e }}" $KEEP $CLUSTER
+
+    - name: Registry push
+      if: inputs.registry-push != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        ORK_REGISTRY: ${{ inputs.registry-url }}
+      run: |
+        FORCE=""
+        NO_E2E=""
+        [[ "${{ inputs.registry-push-force }}" == "true" ]] && FORCE="--force"
+        [[ "${{ inputs.registry-push-no-e2e }}" == "true" ]] && NO_E2E="--no-e2e"
+        ork registry push ${{ inputs.registry-push }} $FORCE $NO_E2E
+
+    - name: Registry pull
+      id: registry-pull
+      if: inputs.registry-pull != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        ORK_REGISTRY: ${{ inputs.registry-url }}
+      run: |
+        OUT=""
+        [[ -n "${{ inputs.registry-pull-out }}" ]] && OUT="--out ${{ inputs.registry-pull-out }}"
+        ork registry pull ${{ inputs.registry-pull }} $OUT
+        echo "path=${{ inputs.working-directory }}/${{ inputs.registry-pull-out || '.' }}" >> $GITHUB_OUTPUT

@@ -1,146 +1,231 @@
-# Orkestra E2E Action
+# Orkestra GitHub Action
 
 <div align="center">
     <img src="logo.svg" width="140" alt="Orkestra Logo">
 </div>
 
-A minimal GitHub Action that installs the `ork` CLI and runs `ork e2e` against your operator.
+A GitHub Action that installs the `ork` CLI and exposes every `ork` command as a composable step — validate, plan, generate, e2e, registry push/pull.
 
 ---
 
 ## How it works
 
-1. Installs the `ork` CLI (pinned version or latest)
-2. Runs `ork e2e -f <e2e-file>`
+1. Installs the `ork` CLI (pinned or latest)
+2. Runs only the commands you enable via inputs — everything else is skipped
+3. Exposes file paths as outputs for steps that produce artifacts
 
-That's it. All cluster lifecycle, bundle generation, Helm install, and resource verification is handled by `ork e2e` — no extra configuration needed in CI.
+Each command is an independent conditional step. You can run one per job step or combine several in one action call.
 
 ---
 
-## Usage
+## Quick start
 
 ```yaml
-- uses: orkspace/ork-action@v1
+- uses: orkspace/orkestra-action@v1
   with:
-    e2e-file: e2e.yaml
+    validate: ./katalog.yaml
+    e2e: ./e2e.yaml
 ```
-
-The `e2e.yaml` file in your repository drives everything — cluster provider, CRD to test, CR to apply, and expectations to assert.
 
 ---
 
 ## Inputs
 
+### Common
+
 | Input | Default | Description |
 |-------|---------|-------------|
-| `e2e-file` | `e2e.yaml` | Path to the `e2e.yaml` spec file |
 | `ork-version` | `latest` | Version of the `ork` CLI to install |
-| `keep-cluster` | `false` | Keep the kind cluster after the test (useful for debugging) |
-| `cluster` | `""` | Use an existing kubectl context instead of creating a new cluster |
+| `working-directory` | `.` | Directory to run all commands in |
+
+### `validate`
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `validate` | `""` | Path to a Katalog, Komposer, Motif, or E2E file. Empty = skip. |
+
+### `plan`
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `plan` | `""` | Path to `katalog.yaml` to diff. Empty = skip. |
+| `plan-bundle` | `""` | Path to a `bundle.yaml` — reads the deployed Katalog from it. No cluster access needed. |
+| `plan-cm` | `""` | Path to a `configmap.yaml` — reads the deployed Katalog from it. No cluster access needed. |
+| `plan-namespace` | `orkestra-system` | Namespace — only used when neither `plan-bundle` nor `plan-cm` is set. |
+| `plan-output` | `plan.txt` | File to write the plan diff output to. |
+
+One of `plan-bundle` or `plan-cm` is required when `plan` is set.
+
+### `template`
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `template` | `""` | Path to `katalog.yaml` to render the fully-expanded runtime Katalog from. Empty = skip. |
+| `template-yaml-output` | `template.yaml` | Output file for the YAML render (`ork template --yaml`). |
+| `template-json-output` | `template.json` | Output file for the JSON render (`ork template --json`). |
+
+### `generate bundle`
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `generate-bundle` | `""` | Path to `katalog.yaml` to generate a bundle from. Empty = skip. |
+| `generate-bundle-output` | `bundle.yaml` | Output file path |
+| `generate-bundle-namespace` | `orkestra-system` | Kubernetes namespace |
+
+### `generate configmap`
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `generate-configmap` | `""` | Path to `katalog.yaml` or `komposer.yaml`. Empty = skip. |
+| `generate-configmap-output` | `configmap.yaml` | Output file path |
+| `generate-configmap-namespace` | `orkestra-system` | Kubernetes namespace |
+
+### `generate rbac`
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `generate-rbac` | `""` | Path to `katalog.yaml`. Empty = skip. |
+| `generate-rbac-output` | `rbac.yaml` | Output file path |
+| `generate-rbac-namespace` | `orkestra-system` | Kubernetes namespace for the ServiceAccount |
+
+### `generate registry` (typed operators)
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `generate-registry` | `""` | Comma-separated list of project directories. Generates `zz_generated_runtime_registry.go` in each. Empty = skip. |
+
+### `e2e`
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `e2e` | `""` | Path to the `e2e.yaml` spec file. Empty = skip. |
+| `e2e-keep-cluster` | `false` | Keep the kind cluster after the test |
+| `e2e-cluster` | `""` | Use an existing kubectl context instead of creating a cluster |
+
+### `registry push`
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `registry-push` | `""` | `"name:version /path/to/dir"` or `"/path/to/dir"`. Empty = skip. |
+| `registry-push-force` | `false` | Push even if e2e fails or metadata version differs |
+| `registry-push-no-e2e` | `false` | Skip the e2e gate (even if `e2e.yaml` is present in the pattern dir) |
+| `registry-url` | `""` | OCI registry URL. Also read from `ORK_REGISTRY` env var. |
+| `registry-username` | `""` | Registry username |
+| `registry-password` | `""` | Registry password or token |
+
+### `registry pull`
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `registry-pull` | `""` | `"name:version"`. Empty = skip. |
+| `registry-pull-out` | `""` | Directory to extract the pulled pattern into |
 
 ---
 
-## Example: single operator
+## Outputs
 
-```yaml
-name: E2E
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  e2e:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: orkspace/ork-action@v1
-        with:
-          e2e-file: e2e.yaml
-```
+| Output | Description |
+|--------|-------------|
+| `plan-file` | Path to the plan diff output file (default `plan.txt`) |
+| `template-yaml-file` | Path to the YAML-rendered runtime Katalog (default `template.yaml`) |
+| `template-json-file` | Path to the JSON-rendered runtime Katalog (default `template.json`) |
+| `bundle-file` | Path to the generated `bundle.yaml` |
+| `configmap-file` | Path to the generated `configmap.yaml` |
+| `rbac-file` | Path to the generated `rbac.yaml` |
+| `registry-file` | Path to the generated `zz_generated_runtime_registry.go` |
+| `pattern-path` | Local path where the pulled pattern was extracted |
 
 ---
 
-## Example: matrix across multiple operators
+## Examples
+
+### Validate and run e2e
 
 ```yaml
-name: E2E
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  e2e:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        example:
-          - examples/beginner/01-hello-website
-          - examples/beginner/02-with-service
-          - examples/advanced/09-hooks
-
-    defaults:
-      run:
-        working-directory: ${{ matrix.example }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: orkspace/ork-action@v1
-        with:
-          e2e-file: e2e.yaml
+- uses: orkspace/orkestra-action@v1
+  with:
+    validate: ./katalog.yaml
+    e2e: ./e2e.yaml
 ```
 
----
-
-## The `e2e.yaml` spec
-
-Every operator has three canonical files — `katalog.yaml`, `crd.yaml`, `cr.yaml`. The `e2e.yaml` wires them together and declares what to assert:
+### Generate and upload a deployment bundle
 
 ```yaml
-apiVersion: orkestra.orkspace.io/v1
-kind: E2E
-metadata:
-  name: hello-website-e2e
-  description: Verify the hello-website operator deploys and cleans up
+- name: Generate bundle
+  uses: orkspace/orkestra-action@v1
+  id: bundle
+  with:
+    generate-bundle: ./katalog.yaml
+    generate-bundle-output: bundle.yaml
 
-spec:
-  katalog: ./katalog.yaml
-  crd: ./crd.yaml
-  cr: ./cr.yaml
-
-  cluster:
-    provider: kind
-    name: ork-e2e
-    reuse: false
-
-  expect:
-    - name: Deployment created
-      after: cr-applied
-      timeout: 60s
-      resources:
-        - kind: Deployment
-          namespace: default
-          ready: true
-
-    - name: Deployment removed on delete
-      after: cr-deleted
-      timeout: 30s
-      resources:
-        - kind: Deployment
-          namespace: default
-          count: 0
+- name: Upload
+  uses: actions/upload-artifact@v4
+  with:
+    name: bundle
+    path: ${{ steps.bundle.outputs.bundle-file }}
 ```
 
-Validate your `e2e.yaml` locally before pushing:
+### Typed operator — generate registry, build image, deploy, then e2e
 
-```sh
-ork validate -f e2e.yaml
+Typed operators (Go hooks / constructors) require a custom binary and Docker image.
+`generate-registry` writes the Go glue code. You then build the image and deploy
+Orkestra with `--set runtime.image.repository=... --set runtime.image.tag=...`.
+
+```yaml
+- uses: orkspace/orkestra-action@v1
+  with:
+    validate: ./katalog.yaml
+    generate-registry: "."              # writes zz_generated_runtime_registry.go
+
+- run: go build -o ./bin/operator ./cmd/operator
+
+- uses: docker/build-push-action@v5
+  with:
+    context: .
+    push: true
+    tags: ghcr.io/myorg/my-operator:${{ github.sha }}
+
+- run: |
+    helm upgrade --install orkestra orkestra/orkestra \
+      --set runtime.image.repository=ghcr.io/myorg/my-operator \
+      --set runtime.image.tag=${{ github.sha }} \
+      --namespace orkestra-system --create-namespace --wait
+
+- uses: orkspace/orkestra-action@v1
+  with:
+    e2e: ./e2e.yaml
+    e2e-cluster: kind-ork-e2e
+```
+
+See [`examples/typed-operator.yml`](examples/typed-operator.yml) for the complete workflow including kind cluster setup and image loading.
+
+### Publish a pattern on tag push
+
+```yaml
+- uses: orkspace/orkestra-action@v1
+  with:
+    registry-push: "my-operator:${{ github.ref_name }} ."
+    registry-url: "ghcr.io/${{ github.repository_owner }}/patterns"
+    registry-username: ${{ github.actor }}
+    registry-password: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### Matrix across multiple operators
+
+```yaml
+strategy:
+  matrix:
+    example:
+      - examples/beginner/01-hello-website
+      - examples/advanced/09-hooks
+
+steps:
+  - uses: actions/checkout@v4
+  - uses: orkspace/orkestra-action@v1
+    with:
+      working-directory: ${{ matrix.example }}
+      validate: ./katalog.yaml
+      e2e: ./e2e.yaml
 ```
 
 ---
