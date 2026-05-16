@@ -1,0 +1,117 @@
+name: Typed operator CI
+
+# For typed (Go hooks / constructor) operators.
+# The ork CLI cannot run these — you must build your own operator binary,
+# package it as a Docker image, and deploy Orkestra with that image.
+#
+# Flow:
+#   1. Generate runtime registry (Go code) from katalog.yaml
+#   2. Build the operator binary (Go)
+#   3. Build and push the Docker image
+#   4. Load image into kind cluster (e2e) or deploy via Helm (production)
+#   5. Run e2e against the running operator
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/my-operator
+  TAG: ${{ github.sha }}
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # ── Step 1: validate the katalog ──────────────────────────────────────────
+      - name: Validate
+        uses: orkspace/orkestra-action@v1
+        with:
+          validate: ./katalog.yaml
+
+      # ── Step 2: generate the runtime registry ────────────────────────────────
+      # Writes pkg/runtime/zz_generated_runtime_registry.go from katalog.yaml.
+      # This file registers your Go types and hooks with the Orkestra runtime.
+      - name: Generate runtime registry
+        uses: orkspace/orkestra-action@v1
+        with:
+          generate-registry: "."
+
+      # ── Step 3: build the operator binary ────────────────────────────────────
+      # -tags runtime is required — it registers your Go types and hooks with
+      # the Orkestra runtime. Without it the binary behaves like the stock ork CLI.
+      - name: Build
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -tags runtime -o ./bin/operator ./cmd/operator
+
+      # ── Step 4: build and push Docker image ──────────────────────────────────
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ env.IMAGE }}:${{ env.TAG }}
+          # On PRs, build only (no push) — image is loaded into kind in the next step
+
+      # ── Step 5: load image into kind (for e2e on PRs) ────────────────────────
+      # On PRs we don't push to the registry, so we load the image directly.
+      - name: Create kind cluster
+        if: github.event_name == 'pull_request'
+        run: kind create cluster --name ork-e2e
+
+      - name: Load image into kind
+        if: github.event_name == 'pull_request'
+        run: kind load docker-image ${{ env.IMAGE }}:${{ env.TAG }} --name ork-e2e
+
+      # ── Step 6: deploy Orkestra with your operator image ─────────────────────
+      - name: Deploy Orkestra
+        if: github.event_name == 'pull_request'
+        run: |
+          helm repo add orkestra https://orkspace.github.io/orkestra
+          helm upgrade --install orkestra orkestra/orkestra \
+            --set runtime.image.repository=${{ env.IMAGE }} \
+            --set runtime.image.tag=${{ env.TAG }} \
+            --namespace orkestra-system \
+            --create-namespace \
+            --wait --timeout 120s
+
+      # ── Step 7: run e2e against the running operator ─────────────────────────
+      - name: E2E
+        if: github.event_name == 'pull_request'
+        uses: orkspace/orkestra-action@v1
+        with:
+          e2e: ./e2e.yaml
+          e2e-cluster: kind-ork-e2e    # use the existing cluster, don't create a new one
+
+      # ── Step 8: generate the deployment bundle ───────────────────────────────
+      - name: Generate bundle
+        uses: orkspace/orkestra-action@v1
+        id: bundle
+        with:
+          generate-bundle: ./katalog.yaml
+          generate-bundle-output: bundle.yaml
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle
+          path: ${{ steps.bundle.outputs.bundle-file }}

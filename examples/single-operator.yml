@@ -1,4 +1,4 @@
-name: E2E
+name: CI
 
 on:
   push:
@@ -6,11 +6,31 @@ on:
   pull_request:
 
 jobs:
-  e2e:
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: orkspace/ork-action@v1
+      - name: Validate
+        uses: orkspace/orkestra-action@v1
         with:
-          e2e-file: e2e.yaml
+          validate: ./katalog.yaml
+
+      - name: Generate bundle
+        uses: orkspace/orkestra-action@v1
+        id: bundle
+        with:
+          generate-bundle: ./katalog.yaml
+          generate-bundle-output: bundle.yaml
+          generate-bundle-namespace: orkestra-system
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle
+          path: ${{ steps.bundle.outputs.bundle-file }}
+
+      - name: E2E
+        uses: orkspace/orkestra-action@v1
+        with:
+          e2e: ./e2e.yaml

@@ -1,4 +1,4 @@
-name: E2E
+name: E2E matrix
 
 on:
   push:
@@ -16,13 +16,11 @@ jobs:
           - examples/beginner/02-with-service
           - examples/advanced/09-hooks
 
-    defaults:
-      run:
-        working-directory: ${{ matrix.example }}
-
     steps:
       - uses: actions/checkout@v4
 
-      - uses: orkspace/ork-action@v1
+      - uses: orkspace/orkestra-action@v1
         with:
-          e2e-file: e2e.yaml
+          working-directory: ${{ matrix.example }}
+          validate: ./katalog.yaml
+          e2e: ./e2e.yaml
