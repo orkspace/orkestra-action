@@ -1,28 +1,30 @@
+### Changelog
+
 # Changelog
 
 ## Unreleased
 
 ### Added
-- Initial repository structure for the Orkestra GitHub Action  
-- Base `README.md` with project description and badges  
-- Initial action definition (`action.yml`)  
-- Initial entrypoint script with support for:
-  - katalog resolution  
-  - versioned Ork CLI installation  
-  - validate  
-  - template  
-  - generate rbac  
-  - generate configmap  
-  - generate bundle  
-  - init with arbitrary arguments  
-- Initial examples directory with placeholder structure  
-- Initial logo and repository metadata
+- Initial reusable composite GitHub Action `action.yml` that installs the `ork` CLI and runs `ork e2e`
+- examples/single-operator.yml demonstrating a single-operator E2E job
+- Updated README.md to document the thin wrapper action and `e2e.yaml` driven workflow
 
 ### Changed
-- No changes in this release
+- Examples updated to use the new wrapper action and `e2e.yaml` as the single source of truth for E2E tests
+- examples/matrix.yml updated to run per-example E2E specs via the wrapper action
+- Action documentation simplified to reflect the minimal inputs and behavior of the composite action
 
 ### Fixed
 - No fixes in this release
 
 ### Removed
-- No removals in this release
+- Dockerfile
+- entrypoint.sh
+- examples/generate-bundle.yml
+- examples/init.yml
+- examples/multi-environment-gitops.yml
+- examples/publish-pattern-2.yml
+- examples/publish-pattern.yml
+- examples/template.yml
+- examples/validate.yml
+
