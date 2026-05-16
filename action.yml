@@ -1,153 +1,39 @@
-name: "Orkestra CI"
-description: "Run Orkestra CLI commands in CI with versioned reproducibility"
+name: "Orkestra E2E"
+description: "Run Orkestra E2E tests — installs ork and runs ork e2e"
 
 inputs:
-  katalog:
-    description: "Path to existing katalog.yaml or komposer.yaml (ignored if init=true)"
+  e2e-file:
+    description: "Path to the e2e.yaml spec file"
     required: false
-    default: ""
-
-  init:
-    description: "Initialize a new operator using the specified pack and example-subdir"
-    required: false
-    default: "false"
-
-  pack:
-    description: "Pack to use when init=true (beginner, intermediate, advanced, use-cases)"
-    required: false
-    default: "beginner"
-
-  example-subdir:
-    description: "Subdirectory under examples/<pack> containing the katalog, CRD, and CR (required if init=true)"
-    required: false
-    default: ""
-
+    default: "e2e.yaml"
   ork-version:
-    description: "Version of Ork CLI to use (e.g. v1.2.3, latest)"
+    description: "Ork CLI version to install (default: latest)"
     required: false
     default: "latest"
-
-  output-dir:
-    description: "Directory to write artifacts into"
-    required: false
-    default: "orkestra-artifacts"
-
-  kompose:
-    description: "Run 'ork kompose' before other steps"
+  keep-cluster:
+    description: "Keep the kind cluster after the test completes"
     required: false
     default: "false"
-
-  validate:
-    description: "Run 'ork validate'"
+  cluster:
+    description: "Use an existing kubectl context instead of creating a cluster"
     required: false
-    default: "false"
-
-  template:
-    description: "Run 'ork template'"
-    required: false
-    default: "false"
-
-  generate-rbac:
-    description: "Run 'ork generate rbac'"
-    required: false
-    default: "false"
-
-  generate-configmap:
-    description: "Run 'ork generate configmap'"
-    required: false
-    default: "false"
-  
-  namespace:
-    description: "Kubernetes namespace for the generated bundle (default: orkestra-system)"
-    required: false
-    default: "orkestra-system"
-
-  generate-bundle:
-    description: "Run 'ork generate bundle'"
-    required: false
-    default: "false"
-  
-  generate-registry:
-    description: "Run 'ork generate registry' for typed operators"
-    required: false
-    default: "false"
-
-  # Registry authentication
-  registry-server:
-    description: "OCI registry server (default: ghcr.io)"
-    required: false
-    default: "ghcr.io"
-  registry-username:
-    description: "Username for registry login"
-    required: false
-  registry-password:
-    description: "Password or token for registry login"
-    required: false
-
-  # Registry command to run (optional)
-  registry-command:
-    description: "Registry command (push, pull, info, list)"
-    required: false
-  registry-ref:
-    description: "Pattern reference (e.g., website:1.0.0)"
-    required: false
-  pattern-dir:
-    description: "Directory to push (for push command)"
-    required: false
-
-outputs:
-  komposed_katalog:
-    description: "Path to the komposed katalog.yaml"
-  validate_log:
-    description: "Path to validation log"
-  template_dir:
-    description: "Directory containing rendered templates"
-  rbac_file:
-    description: "Generated RBAC YAML file"
-  configmap_file:
-    description: "Generated ConfigMap YAML file"
-  bundle_file:
-    description: "Generated bundle YAML file"
-  init_dir:
-    description: "Root directory of the initialized operator (only if init=true)"
-  operator_dir:
-    description: "Directory containing the expanded example pack (examples/<pack>)"
-  katalog_path:
-    description: "Path to the katalog.yaml file (after init/kompose)"
-  crd_path:
-    description: "Path to the CRD YAML file (only if init=true)"
-  cr_path:
-    description: "Path to the CR YAML file (only if init=true)"
-  example_dir:
-    description: "Directory containing the chosen example"
-  namespace:
-    description: "Kubernetes namespace used for generated resources (default: orkestra-system)"
-  registry_file:
-    description: "Path to the generated registry file (pkg/runtime/zz_generated_runtime_registry.go)"
-  pattern_path:
-    description: "Local filesystem path to the pulled pattern (for pull command)"
+    default: ""
 
 runs:
-  using: "docker"
-  image: "Dockerfile"
-  args:
-    - ${{ inputs.katalog }}
-    - ${{ inputs.init }}
-    - ${{ inputs.pack }}
-    - ${{ inputs.example-subdir }}
-    - ${{ inputs.ork-version }}
-    - ${{ inputs.output-dir }}
-    - ${{ inputs.kompose }}
-    - ${{ inputs.validate }}
-    - ${{ inputs.template }}
-    - ${{ inputs.generate-rbac }}
-    - ${{ inputs.generate-configmap }}
-    - ${{ inputs.generate-bundle }}
-    - ${{ inputs.namespace }}
-    - ${{ inputs.generate-registry }}
-    - ${{ inputs.registry-server }}
-    - ${{ inputs.registry-username }}
-    - ${{ inputs.registry-password }}
-    - ${{ inputs.registry-command }}
-    - ${{ inputs.registry-ref }}
-    - ${{ inputs.pattern-dir }}
+  using: "composite"
+  steps:
+    - name: Install ork
+      shell: bash
+      run: |
+        curl -sSL https://get.orkestra.sh \
+          | ORK_VERSION=${{ inputs.ork-version }} bash
+        echo "$HOME/.orkestra/bin" >> $GITHUB_PATH
+
+    - name: Run E2E
+      shell: bash
+      run: |
+        KEEP=""
+        CLUSTER=""
+        [[ "${{ inputs.keep-cluster }}" == "true" ]] && KEEP="--keep-cluster"
+        [[ -n "${{ inputs.cluster }}" ]] && CLUSTER="--cluster ${{ inputs.cluster }}"
+        ork e2e -f "${{ inputs.e2e-file }}" $KEEP $CLUSTER
