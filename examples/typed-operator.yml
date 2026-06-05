@@ -9,8 +9,12 @@ name: Typed operator CI
 #   2. Generate runtime registry (Go code) from katalog.yaml
 #   3. Build the operator binary (Go)
 #   4. Build and push the Docker image
-#   5. Load image into kind cluster (e2e) or deploy via Helm (production)
-#   6. Run e2e against the running operator
+#   5. Create cluster with ork (installs kind, kubectl, helm if absent)
+#   6. Load image into kind
+#   7. Generate bundle from katalog.yaml
+#   8. Apply bundle (CRDs, RBAC, runtime config) — must be before helm
+#   9. Deploy Orkestra with your operator image via Helm
+#  10. Run e2e against the running operator
 
 on:
   push:
@@ -36,7 +40,6 @@ jobs:
           go-version-file: go.mod
 
       # ── Step 1: validate and simulate ────────────────────────────────────────
-      # simulate runs without a cluster — catches logic errors before the build.
       - name: Validate and simulate
         uses: orkspace/orkestra-action@v1
         with:
@@ -45,15 +48,13 @@ jobs:
 
       # ── Step 2: generate the runtime registry ────────────────────────────────
       # Writes pkg/runtime/zz_generated_runtime_registry.go from katalog.yaml.
-      # This file registers your Go types and hooks with the Orkestra runtime.
       - name: Generate runtime registry
         uses: orkspace/orkestra-action@v1
         with:
           generate-registry: "."
 
       # ── Step 3: build the operator binary ────────────────────────────────────
-      # -tags runtime is required — it registers your Go types and hooks with
-      # the Orkestra runtime. Without it the binary behaves like the stock ork CLI.
+      # -tags runtime registers your Go types and hooks with the Orkestra runtime.
       - name: Build
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
@@ -73,19 +74,36 @@ jobs:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ env.IMAGE }}:${{ env.TAG }}
-          # On PRs, build only (no push) — image is loaded into kind in the next step
 
-      # ── Step 5: load image into kind (for e2e on PRs) ────────────────────────
-      # On PRs we don't push to the registry, so we load the image directly.
-      - name: Create kind cluster
+      # ── Step 5: create cluster ────────────────────────────────────────────────
+      # ork create cluster downloads kind, kubectl, and helm if absent,
+      # creates the ork-playground cluster, and switches kubectl context.
+      - name: Create cluster
         if: github.event_name == 'pull_request'
-        run: kind create cluster --name ork-e2e
+        run: ork create cluster --name ork-playground
 
+      # ── Step 6: load image into kind ─────────────────────────────────────────
       - name: Load image into kind
         if: github.event_name == 'pull_request'
-        run: kind load docker-image ${{ env.IMAGE }}:${{ env.TAG }} --name ork-e2e
+        run: kind load docker-image ${{ env.IMAGE }}:${{ env.TAG }} --name ork-playground
 
-      # ── Step 6: deploy Orkestra with your operator image ─────────────────────
+      # ── Step 7: generate bundle ───────────────────────────────────────────────
+      # The bundle contains the CRDs, RBAC, and runtime config for your operator.
+      # It must be applied before Helm so the cluster has the right resources.
+      - name: Generate bundle
+        if: github.event_name == 'pull_request'
+        id: bundle
+        uses: orkspace/orkestra-action@v1
+        with:
+          generate-bundle: ./katalog.yaml
+          generate-bundle-output: bundle.yaml
+
+      # ── Step 8: apply bundle ──────────────────────────────────────────────────
+      - name: Apply bundle
+        if: github.event_name == 'pull_request'
+        run: kubectl apply -f bundle.yaml
+
+      # ── Step 9: deploy Orkestra with your operator image ─────────────────────
       - name: Deploy Orkestra
         if: github.event_name == 'pull_request'
         run: |
@@ -97,23 +115,16 @@ jobs:
             --create-namespace \
             --wait --timeout 120s
 
-      # ── Step 7: run e2e against the running operator ─────────────────────────
+      # ── Step 10: run e2e against the running operator ─────────────────────────
       - name: E2E
         if: github.event_name == 'pull_request'
         uses: orkspace/orkestra-action@v1
         with:
           e2e: "true"
-          e2e-cluster: kind-ork-e2e    # use the existing cluster, don't create a new one
-
-      # ── Step 8: generate the deployment bundle ───────────────────────────────
-      - name: Generate bundle
-        uses: orkspace/orkestra-action@v1
-        id: bundle
-        with:
-          generate-bundle: ./katalog.yaml
-          generate-bundle-output: bundle.yaml
+          e2e-cluster: kind-ork-playground
 
       - name: Upload bundle artifact
+        if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: bundle
