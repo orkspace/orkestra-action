@@ -264,8 +264,23 @@ runs:
     - name: Install ork
       shell: bash
       run: |
-        if [[ -n "${{ inputs.ork-version }}" ]]; then
-          curl -sSL https://get.orkestra.sh | ORK_VERSION=${{ inputs.ork-version }} bash
+        ORK_BIN="$HOME/.orkestra/bin/ork"
+        REQUESTED="${{ inputs.ork-version }}"
+
+        if [[ -f "$ORK_BIN" ]]; then
+          if [[ -z "$REQUESTED" ]]; then
+            echo "$HOME/.orkestra/bin" >> $GITHUB_PATH
+            exit 0
+          fi
+          INSTALLED=$("$ORK_BIN" version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+          if [[ "$INSTALLED" == "$REQUESTED" ]]; then
+            echo "$HOME/.orkestra/bin" >> $GITHUB_PATH
+            exit 0
+          fi
+        fi
+
+        if [[ -n "$REQUESTED" ]]; then
+          curl -sSL https://get.orkestra.sh | ORK_VERSION="$REQUESTED" bash
         else
           curl -sSL https://get.orkestra.sh | bash
         fi
