@@ -3,9 +3,9 @@ description: "The official GitHub Action for Orkestra — runs the full ork CLI 
 
 inputs:
   ork-version:
-    description: "Version of the ork CLI to install (e.g. v1.2.3 or latest)"
+    description: "Version of the ork CLI to install (e.g. v1.2.3). Defaults to the latest release."
     required: false
-    default: "latest"
+    default: ""
 
   working-directory:
     description: "Directory to run commands in. Defaults to the repository root."
@@ -264,8 +264,11 @@ runs:
     - name: Install ork
       shell: bash
       run: |
-        curl -sSL https://get.orkestra.sh \
-          | ORK_VERSION=${{ inputs.ork-version }} bash
+        if [[ -n "${{ inputs.ork-version }}" ]]; then
+          curl -sSL https://get.orkestra.sh | ORK_VERSION=${{ inputs.ork-version }} bash
+        else
+          curl -sSL https://get.orkestra.sh | bash
+        fi
         echo "$HOME/.orkestra/bin" >> $GITHUB_PATH
 
     - name: Init pack
