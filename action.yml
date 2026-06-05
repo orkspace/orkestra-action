@@ -344,7 +344,9 @@ runs:
         else
           run_simulate
         fi
-        [[ -n "$DEBUG" ]] && echo "debug-file=${{ inputs.working-directory }}/${{ inputs.simulate-debug-output }}" >> $GITHUB_OUTPUT
+        if [[ -n "$DEBUG" ]]; then
+          echo "debug-file=${{ inputs.working-directory }}/${{ inputs.simulate-debug-output }}" >> $GITHUB_OUTPUT
+        fi
 
     - name: Plan
       id: plan
