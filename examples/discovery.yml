@@ -1,0 +1,41 @@
+name: Full discovery CI
+
+# Runs simulate and e2e across every example in the repository.
+# Uses ./... discovery — ork finds all simulate.yaml and e2e.yaml files recursively.
+#
+# Useful for monorepos or pattern libraries where you want a single workflow
+# to cover every operator rather than maintaining a matrix.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  simulate-all:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No cluster needed. Runs all simulate.yaml (assert mode) and
+      # e2e.yaml (op-print mode) files found under examples/.
+      - name: Simulate all examples
+        uses: orkspace/orkestra-action@v1
+        with:
+          simulate-depth: full
+          simulate-skip: "vendor,testdata"
+
+  e2e-all:
+    runs-on: ubuntu-latest
+    needs: simulate-all
+    steps:
+      - uses: actions/checkout@v4
+
+      # Full cluster lifecycle for every e2e.yaml under examples/.
+      # e2e-wait gives each cluster time to tear down before the next starts.
+      - name: E2E all examples
+        uses: orkspace/orkestra-action@v1
+        with:
+          e2e-depth: full
+          e2e-skip: "vendor,testdata"
+          e2e-wait: "5s"

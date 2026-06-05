@@ -22,5 +22,6 @@ jobs:
       - uses: orkspace/orkestra-action@v1
         with:
           working-directory: ${{ matrix.example }}
-          validate: ./katalog.yaml
-          e2e: ./e2e.yaml
+          validate: "true"
+          simulate: "true"
+          e2e: "true"
