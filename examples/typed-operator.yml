@@ -5,11 +5,12 @@ name: Typed operator CI
 # package it as a Docker image, and deploy Orkestra with that image.
 #
 # Flow:
-#   1. Generate runtime registry (Go code) from katalog.yaml
-#   2. Build the operator binary (Go)
-#   3. Build and push the Docker image
-#   4. Load image into kind cluster (e2e) or deploy via Helm (production)
-#   5. Run e2e against the running operator
+#   1. Validate + simulate (no cluster — catches logic errors early)
+#   2. Generate runtime registry (Go code) from katalog.yaml
+#   3. Build the operator binary (Go)
+#   4. Build and push the Docker image
+#   5. Load image into kind cluster (e2e) or deploy via Helm (production)
+#   6. Run e2e against the running operator
 
 on:
   push:
@@ -34,11 +35,13 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # ── Step 1: validate the katalog ──────────────────────────────────────────
-      - name: Validate
+      # ── Step 1: validate and simulate ────────────────────────────────────────
+      # simulate runs without a cluster — catches logic errors before the build.
+      - name: Validate and simulate
         uses: orkspace/orkestra-action@v1
         with:
-          validate: ./katalog.yaml
+          validate: "true"
+          simulate: "true"
 
       # ── Step 2: generate the runtime registry ────────────────────────────────
       # Writes pkg/runtime/zz_generated_runtime_registry.go from katalog.yaml.
@@ -99,7 +102,7 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: orkspace/orkestra-action@v1
         with:
-          e2e: ./e2e.yaml
+          e2e: "true"
           e2e-cluster: kind-ork-e2e    # use the existing cluster, don't create a new one
 
       # ── Step 8: generate the deployment bundle ───────────────────────────────

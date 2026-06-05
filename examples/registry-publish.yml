@@ -12,10 +12,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate
+      # Validate and simulate before publishing — no cluster needed.
+      - name: Validate and simulate
         uses: orkspace/orkestra-action@v1
         with:
-          validate: ./katalog.yaml
+          validate: "true"
+          simulate: "true"
 
       - name: Publish to registry
         uses: orkspace/orkestra-action@v1
