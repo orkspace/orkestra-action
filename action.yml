@@ -1,5 +1,5 @@
 name: "Orkestra"
-description: "Install the ork CLI and run any ork command — validate, plan, template, generate, e2e, registry"
+description: "The official GitHub Action for Orkestra — runs the full ork CLI surface from any workflow"
 
 inputs:
   ork-version:
@@ -14,9 +14,55 @@ inputs:
 
   # ── validate ────────────────────────────────────────────────────────────────
   validate:
-    description: "Path to a Katalog, Komposer, Motif, or E2E file to validate. Skip if empty."
+    description: "Enable validate. 'true' = auto-detect katalog.yaml/komposer.yaml. Path = validate that file."
     required: false
     default: ""
+  validate-depth:
+    description: "full → ork validate --full (RBAC, dependency graph, per-CRD permissions)."
+    required: false
+    default: "single"
+
+  # ── simulate ─────────────────────────────────────────────────────────────────
+  simulate:
+    description: "Enable simulate. 'true' = auto-detect (simulate.yaml → e2e.yaml → katalog.yaml). Path = use that file directly."
+    required: false
+    default: ""
+  simulate-depth:
+    description: "full → ork simulate ./... (recursive discovery). single (default) = auto-detect or explicit file."
+    required: false
+    default: "single"
+  simulate-katalog:
+    description: "Explicit katalog.yaml path. Always wins over simulate and simulate-depth."
+    required: false
+    default: ""
+  simulate-cr:
+    description: "Explicit cr.yaml path. Paired with simulate-katalog. CLI falls back to cr.yaml in cwd if omitted."
+    required: false
+    default: ""
+  simulate-crd:
+    description: "CRD name to target when the katalog defines multiple (ork simulate --crd). All CRDs if omitted."
+    required: false
+    default: ""
+  simulate-cycles:
+    description: "Maximum reconcile cycles (ork simulate --cycles)."
+    required: false
+    default: ""
+  simulate-skip-external:
+    description: "Stub external: HTTP calls — no real network requests. Defaults to true since CI has no dev server."
+    required: false
+    default: "true"
+  simulate-skip:
+    description: "Comma-separated path patterns to skip in ./... discovery (ork simulate --skip)."
+    required: false
+    default: ""
+  simulate-debug:
+    description: "Save per-cycle op trace to simulate-debug-output (ork simulate --debug-ops)."
+    required: false
+    default: "false"
+  simulate-debug-output:
+    description: "File to write --debug-ops trace to."
+    required: false
+    default: "simulate-debug.txt"
 
   # ── plan ────────────────────────────────────────────────────────────────────
   plan:
@@ -104,15 +150,27 @@ inputs:
 
   # ── e2e ─────────────────────────────────────────────────────────────────────
   e2e:
-    description: "Path to the e2e.yaml spec file. Skip if empty."
+    description: "Enable e2e. 'true' = auto-detect e2e.yaml. Path = use that file directly."
     required: false
     default: ""
+  e2e-depth:
+    description: "full → ork e2e ./... (recursive discovery). single (default) = use e2e or explicit file."
+    required: false
+    default: "single"
   e2e-keep-cluster:
     description: "Keep the kind cluster after e2e completes (useful for debugging)."
     required: false
     default: "false"
   e2e-cluster:
     description: "Use an existing kubectl context instead of creating a new cluster."
+    required: false
+    default: ""
+  e2e-wait:
+    description: "Wait duration between tests in ./... discovery mode. Lets clusters fully tear down before the next starts."
+    required: false
+    default: "3s"
+  e2e-skip:
+    description: "Comma-separated path patterns to skip in ./... discovery (ork e2e --skip)."
     required: false
     default: ""
 
@@ -180,6 +238,11 @@ outputs:
     description: "Path to the generated zz_generated_runtime_registry.go file."
     value: ${{ steps.generate-registry.outputs.file }}
 
+  # ── simulate ─────────────────────────────────────────────────────────────────
+  simulate-debug-file:
+    description: "Path to the --debug-ops trace file (only when simulate-debug: true)."
+    value: ${{ steps.simulate.outputs.debug-file }}
+
   # ── registry pull ────────────────────────────────────────────────────────────
   pattern-path:
     description: "Local path where the pulled pattern was extracted."
@@ -208,7 +271,47 @@ runs:
       if: inputs.validate != ''
       shell: bash
       working-directory: ${{ inputs.working-directory }}
-      run: ork validate -f "${{ inputs.validate }}"
+      run: |
+        FULL=""
+        [[ "${{ inputs.validate-depth }}" == "full" ]] && FULL="--full"
+        if [[ "${{ inputs.validate }}" != "true" ]]; then
+          ork validate -f "${{ inputs.validate }}" $FULL
+        else
+          ork validate $FULL
+        fi
+
+    - name: Simulate
+      id: simulate
+      if: inputs.simulate != '' || inputs.simulate-katalog != '' || inputs.simulate-depth == 'full'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        SKIP_EXT="" CYCLES="" CRD="" DEBUG="" SKIP=""
+        [[ "${{ inputs.simulate-skip-external }}" == "true" ]] && SKIP_EXT="--skip-external"
+        [[ -n "${{ inputs.simulate-cycles }}"               ]] && CYCLES="--cycles ${{ inputs.simulate-cycles }}"
+        [[ -n "${{ inputs.simulate-crd }}"                  ]] && CRD="--crd ${{ inputs.simulate-crd }}"
+        [[ "${{ inputs.simulate-debug }}" == "true"         ]] && DEBUG="--debug-ops"
+        [[ -n "${{ inputs.simulate-skip }}"                 ]] && SKIP="--skip ${{ inputs.simulate-skip }}"
+
+        run_simulate() {
+          if [[ -n "$DEBUG" ]]; then
+            ork simulate "$@" $SKIP_EXT $CYCLES $CRD $DEBUG | tee "${{ inputs.simulate-debug-output }}"
+          else
+            ork simulate "$@" $SKIP_EXT $CYCLES $CRD
+          fi
+        }
+
+        if   [[ -n "${{ inputs.simulate-katalog }}" ]]; then
+          CR="" ; [[ -n "${{ inputs.simulate-cr }}" ]] && CR="--cr ${{ inputs.simulate-cr }}"
+          run_simulate -f "${{ inputs.simulate-katalog }}" $CR
+        elif [[ "${{ inputs.simulate-depth }}" == "full" ]]; then
+          run_simulate ./... $SKIP
+        elif [[ "${{ inputs.simulate }}" != "true" ]]; then
+          run_simulate -f "${{ inputs.simulate }}"
+        else
+          run_simulate
+        fi
+        [[ -n "$DEBUG" ]] && echo "debug-file=${{ inputs.working-directory }}/${{ inputs.simulate-debug-output }}" >> $GITHUB_OUTPUT
 
     - name: Plan
       id: plan
@@ -284,15 +387,23 @@ runs:
         echo "file=${{ inputs.working-directory }}/${FIRST_DIR}/pkg/runtime/zz_generated_runtime_registry.go" >> $GITHUB_OUTPUT
 
     - name: E2E
-      if: inputs.e2e != ''
+      if: inputs.e2e != '' || inputs.e2e-depth == 'full'
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: |
-        KEEP=""
-        CLUSTER=""
+        KEEP="" CLUSTER="" SKIP="" WAIT=""
         [[ "${{ inputs.e2e-keep-cluster }}" == "true" ]] && KEEP="--keep-cluster"
-        [[ -n "${{ inputs.e2e-cluster }}" ]] && CLUSTER="--cluster ${{ inputs.e2e-cluster }}"
-        ork e2e -f "${{ inputs.e2e }}" $KEEP $CLUSTER
+        [[ -n "${{ inputs.e2e-cluster }}"             ]] && CLUSTER="--cluster ${{ inputs.e2e-cluster }}"
+        [[ -n "${{ inputs.e2e-skip }}"                ]] && SKIP="--skip ${{ inputs.e2e-skip }}"
+        [[ -n "${{ inputs.e2e-wait }}"                ]] && WAIT="--wait ${{ inputs.e2e-wait }}"
+
+        if   [[ "${{ inputs.e2e-depth }}" == "full" ]]; then
+          ork e2e ./... $KEEP $CLUSTER $SKIP $WAIT
+        elif [[ "${{ inputs.e2e }}" != "true" ]]; then
+          ork e2e -f "${{ inputs.e2e }}" $KEEP $CLUSTER
+        else
+          ork e2e $KEEP $CLUSTER
+        fi
 
     - name: Registry push
       if: inputs.registry-push != ''
