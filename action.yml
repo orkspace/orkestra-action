@@ -12,6 +12,16 @@ inputs:
     required: false
     default: "."
 
+  # ── init ────────────────────────────────────────────────────────────────────
+  init:
+    description: "Run ork init before all other steps. Useful in CI when example files are not checked in."
+    required: false
+    default: "false"
+  pack:
+    description: "Example pack to initialise (beginner, intermediate, advanced, use-cases, …). Used with init: true."
+    required: false
+    default: ""
+
   # ── validate ────────────────────────────────────────────────────────────────
   validate:
     description: "Enable validate. 'true' = auto-detect katalog.yaml/komposer.yaml. Path = validate that file."
@@ -257,6 +267,11 @@ runs:
         curl -sSL https://get.orkestra.sh \
           | ORK_VERSION=${{ inputs.ork-version }} bash
         echo "$HOME/.orkestra/bin" >> $GITHUB_PATH
+
+    - name: Init pack
+      if: inputs.init == 'true' && inputs.pack != ''
+      shell: bash
+      run: ork init --pack "${{ inputs.pack }}"
 
     - name: Registry login
       if: inputs.registry-username != '' && inputs.registry-password != ''
