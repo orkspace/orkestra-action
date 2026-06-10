@@ -1,0 +1,95 @@
+name: "[Ork Plan] - Comment on Pull Request"
+description: "Post an ork plan diff as a comment on a pull request. Use this in a separate job when the plan step ran in a different job."
+
+inputs:
+  plan-file:
+    description: "Path to the rendered plan file. Use when running in the same job as the plan step."
+    required: false
+    default: "plan.txt"
+  plan-artifact:
+    description: "GitHub Actions artifact name to download. Use when the plan step ran in a separate job."
+    required: false
+    default: ""
+  no-changes:
+    description: "'true' if ork plan detected no changes. Pass steps.<id>.outputs.plan-no-changes from the plan job."
+    required: false
+    default: "false"
+  plan-status:
+    description: "Result of the job that ran ork plan (success, failure, cancelled, skipped). Pass needs.<job>.result."
+    required: false
+    default: "success"
+  github-token:
+    description: "GitHub token for posting PR comments."
+    required: true
+    default: ${{ github.token }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Download plan artifact
+      if: inputs.plan-artifact != ''
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.plan-artifact }}
+
+    - name: Comment plan on PR
+      uses: actions/github-script@v7
+      env:
+        PLAN_FILE: ${{ inputs.plan-file }}
+        PLAN_STATUS: ${{ inputs.plan-status }}
+        NO_CHANGES: ${{ inputs.no-changes }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require("fs");
+          const status = process.env.PLAN_STATUS;
+          const noChanges = process.env.NO_CHANGES === 'true';
+          const planFile = process.env.PLAN_FILE;
+
+          if (noChanges) {
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ✅ Ork Plan — No Changes\n\nThe deployed operator configuration is already up to date.`
+            });
+            return;
+          }
+
+          if (status !== 'success') {
+            const messages = {
+              failure:   '❌ Ork plan failed. Please check the workflow logs.',
+              cancelled: '⏹️ Ork plan was cancelled.',
+              skipped:   '⏭️ Ork plan was skipped.',
+            };
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Ork Plan\n\n${messages[status] || `ℹ️ Plan status: ${status}`}`
+            });
+            return;
+          }
+
+          if (!fs.existsSync(planFile)) {
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ❌ Ork Plan Error\n\nPlan file not found at: \`${planFile}\`. Check workflow logs.`
+            });
+            return;
+          }
+
+          const planOutput = fs.readFileSync(planFile, "utf8");
+          const maxLength = 60000;
+          const body = planOutput.length > maxLength
+            ? planOutput.substring(0, maxLength) + "\n\n... (output truncated)"
+            : planOutput;
+
+          await github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `## 📋 Ork Plan\n\n\`\`\`\n${body}\n\`\`\``
+          });

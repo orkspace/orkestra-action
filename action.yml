@@ -95,6 +95,14 @@ inputs:
     description: "File to write the plan diff output to."
     required: false
     default: "plan.txt"
+  comment-on-pr:
+    description: "Post the plan diff as a comment on the pull request. Requires pull-requests: write permission on the job."
+    required: false
+    default: ""
+  github-token:
+    description: "GitHub token for posting PR comments. Only used when comment-on-pr is set."
+    required: false
+    default: ${{ github.token }}
 
   # ── template ─────────────────────────────────────────────────────────────────
   template:
@@ -225,6 +233,9 @@ outputs:
   plan-file:
     description: "Path to the plan diff output file."
     value: ${{ steps.plan.outputs.file }}
+  plan-no-changes:
+    description: "'true' if ork plan detected no changes — the deployed config is already up to date."
+    value: ${{ steps.plan.outputs.no-changes }}
 
   # ── template ─────────────────────────────────────────────────────────────────
   template-yaml-file:
@@ -363,6 +374,11 @@ runs:
           exit 1
         fi
         echo "file=${{ inputs.working-directory }}/${{ inputs.plan-output }}" >> $GITHUB_OUTPUT
+        if [[ ! -s "${{ inputs.plan-output }}" ]]; then
+          echo "no-changes=true" >> $GITHUB_OUTPUT
+        else
+          echo "no-changes=false" >> $GITHUB_OUTPUT
+        fi
 
     - name: Template
       id: template
@@ -439,6 +455,52 @@ runs:
         else
           ork e2e $KEEP $CLUSTER
         fi
+
+    - name: Comment plan on PR
+      if: inputs.comment-on-pr == 'true' && inputs.plan != '' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      env:
+        PLAN_FILE: ${{ inputs.working-directory }}/${{ inputs.plan-output }}
+        NO_CHANGES: ${{ steps.plan.outputs.no-changes }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require("fs");
+          const noChanges = process.env.NO_CHANGES === 'true';
+          const planFile = process.env.PLAN_FILE;
+
+          if (noChanges) {
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ✅ Ork Plan — No Changes\n\nThe deployed operator configuration is already up to date.`
+            });
+            return;
+          }
+
+          if (!fs.existsSync(planFile)) {
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ❌ Ork Plan Error\n\nPlan file not found at: \`${planFile}\`. Check workflow logs.`
+            });
+            return;
+          }
+
+          const planOutput = fs.readFileSync(planFile, "utf8");
+          const maxLength = 60000;
+          const body = planOutput.length > maxLength
+            ? planOutput.substring(0, maxLength) + "\n\n... (output truncated)"
+            : planOutput;
+
+          await github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `## 📋 Ork Plan\n\n\`\`\`\n${body}\n\`\`\``
+          });
 
     - name: Registry push
       if: inputs.registry-push != ''
