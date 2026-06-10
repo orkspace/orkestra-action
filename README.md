@@ -76,6 +76,8 @@ Runs `ork simulate` — no cluster required. Reads `simulate.yaml` (assert mode)
 | `plan-cm` | `""` | Path to a `configmap.yaml` — reads the deployed Katalog from it. No cluster access needed. |
 | `plan-namespace` | `orkestra-system` | Namespace — only used when neither `plan-bundle` nor `plan-cm` is set. |
 | `plan-output` | `plan.txt` | File to write the plan diff output to. |
+| `comment-on-pr` | `""` | Set to `"true"` to post the plan diff as a PR comment. Requires `pull-requests: write` on the job. |
+| `github-token` | `${{ github.token }}` | Token used to post the PR comment. Only used when `comment-on-pr` is set. |
 
 One of `plan-bundle` or `plan-cm` is required when `plan` is set.
 
@@ -153,6 +155,7 @@ One of `plan-bundle` or `plan-cm` is required when `plan` is set.
 | Output | Description |
 |--------|-------------|
 | `plan-file` | Path to the plan diff output file (default `plan.txt`) |
+| `plan-no-changes` | `"true"` if `ork plan` detected no changes — the deployed config is already up to date |
 | `template-yaml-file` | Path to the YAML-rendered runtime Katalog |
 | `template-json-file` | Path to the JSON-rendered runtime Katalog |
 | `bundle-file` | Path to the generated `bundle.yaml` |
@@ -268,6 +271,69 @@ steps:
 ```
 
 See [`examples/typed-operator.yml`](examples/typed-operator.yml) for the full workflow.
+
+### Plan diff commented on PR
+
+Add `comment-on-pr: "true"` to post the plan diff as a PR comment. The job needs `pull-requests: write`.
+
+```yaml
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: orkspace/orkestra-action@v0.1.0
+        with:
+          plan: katalog.yaml
+          plan-bundle: bundle.yaml
+          comment-on-pr: "true"
+```
+
+The comment shows the full `ork plan` diff. If there are no changes, it posts a clean "no changes" message instead. Output is truncated at 60,000 characters to stay within GitHub's comment limit.
+
+**Cross-job pattern** — when you need the plan job to have minimal permissions and the comment job to have `pull-requests: write` separately:
+
+```yaml
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      plan-no-changes: ${{ steps.ork.outputs.plan-no-changes }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ork plan
+        id: ork
+        uses: orkspace/orkestra-action@v0.1.0
+        with:
+          plan: katalog.yaml
+          plan-bundle: bundle.yaml
+      - uses: actions/upload-artifact@v4
+        if: steps.ork.outputs.plan-no-changes != 'true'
+        with:
+          name: ork-plan-${{ github.run_id }}
+          path: ${{ steps.ork.outputs.plan-file }}
+          retention-days: 3
+
+  comment:
+    needs: plan
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: orkspace/orkestra-action/comment-plan-on-pr@v0.1.0
+        with:
+          plan-artifact: ork-plan-${{ github.run_id }}
+          no-changes: ${{ needs.plan.outputs.plan-no-changes }}
+          plan-status: ${{ needs.plan.result }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+See [`examples/plan-pr.yml`](examples/plan-pr.yml) for both patterns side by side.
 
 ### Publish a pattern on tag push
 

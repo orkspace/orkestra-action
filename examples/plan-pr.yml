@@ -1,0 +1,76 @@
+## Plan diff commented on PR — two patterns
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pattern A: opt-in (simplest) — same job, one action call
+#
+# Add comment-on-pr: "true" to the plan step. That's it.
+# Requires: permissions.pull-requests: write on the job.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Plan (opt-in)
+on: [pull_request]
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: orkspace/orkestra-action@v0.1.0
+        with:
+          plan: katalog.yaml
+          plan-bundle: bundle.yaml
+          comment-on-pr: "true"            # ← opt in: posts the diff as a PR comment
+
+---
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pattern B: cross-job — plan in one job, comment in another
+#
+# Use this when you want to keep plan and comment permissions separate,
+# or when the plan job is part of a larger pipeline.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Plan (cross-job)
+on: [pull_request]
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      plan-no-changes: ${{ steps.ork.outputs.plan-no-changes }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run ork plan
+        id: ork
+        uses: orkspace/orkestra-action@v0.1.0
+        with:
+          plan: katalog.yaml
+          plan-bundle: bundle.yaml
+
+      - name: Upload plan artifact
+        if: steps.ork.outputs.plan-no-changes != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ork-plan-${{ github.run_id }}
+          path: ${{ steps.ork.outputs.plan-file }}
+          retention-days: 3
+
+  comment:
+    needs: plan
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: orkspace/orkestra-action/comment-plan-on-pr@v0.1.0
+        with:
+          plan-artifact: ork-plan-${{ github.run_id }}
+          no-changes: ${{ needs.plan.outputs.plan-no-changes }}
+          plan-status: ${{ needs.plan.result }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
