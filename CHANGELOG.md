@@ -1,8 +1,6 @@
-### Changelog
-
 # Changelog
 
-## Unreleased
+## v0.1.1
 
 ### Added
 - `comment-on-pr` input on the main action — set to `"true"` to post the `ork plan` diff as a PR comment in the same job. No extra step required; the comment is posted at the end of the action run. Requires `pull-requests: write` on the job.
