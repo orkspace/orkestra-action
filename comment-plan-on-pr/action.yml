@@ -82,7 +82,7 @@ runs:
           }
 
           const raw = fs.readFileSync(planFile, "utf8");
-          const stripAnsi = s => s.replace(/[][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/g, "");
+          const stripAnsi = s => s.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/g, "");
           const planOutput = stripAnsi(raw);
           const maxLength = 60000;
           const body = planOutput.length > maxLength
