@@ -489,7 +489,9 @@ runs:
             return;
           }
 
-          const planOutput = fs.readFileSync(planFile, "utf8");
+          const raw = fs.readFileSync(planFile, "utf8");
+          const stripAnsi = s => s.replace(/[][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/g, "");
+          const planOutput = stripAnsi(raw);
           const maxLength = 60000;
           const body = planOutput.length > maxLength
             ? planOutput.substring(0, maxLength) + "\n\n... (output truncated)"
@@ -513,7 +515,7 @@ runs:
         NO_E2E=""
         [[ "${{ inputs.registry-push-force }}" == "true" ]] && FORCE="--force"
         [[ "${{ inputs.registry-push-no-e2e }}" == "true" ]] && NO_E2E="--no-e2e"
-        ork registry push ${{ inputs.registry-push }} $FORCE $NO_E2E
+        ork push ${{ inputs.registry-push }} $FORCE $NO_E2E
 
     - name: Registry pull
       id: registry-pull
@@ -525,5 +527,5 @@ runs:
       run: |
         OUT=""
         [[ -n "${{ inputs.registry-pull-out }}" ]] && OUT="--out ${{ inputs.registry-pull-out }}"
-        ork registry pull ${{ inputs.registry-pull }} $OUT
+        ork pull ${{ inputs.registry-pull }} $OUT
         echo "path=${{ inputs.working-directory }}/${{ inputs.registry-pull-out || '.' }}" >> $GITHUB_OUTPUT
