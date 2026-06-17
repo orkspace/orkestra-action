@@ -106,7 +106,7 @@ inputs:
 
   # ── template ─────────────────────────────────────────────────────────────────
   template:
-    description: "Path to katalog.yaml to render the fully-expanded runtime Katalog from. Skip if empty."
+    description: "'true' = auto-detect katalog.yaml in working-directory. Path = render that file. Skip if empty."
     required: false
     default: ""
   template-yaml-output:
@@ -398,8 +398,13 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: |
-        ork template -f "${{ inputs.template }}" --yaml -o "${{ inputs.template-yaml-output }}"
-        ork template -f "${{ inputs.template }}" --json -o "${{ inputs.template-json-output }}"
+        if [[ "${{ inputs.template }}" != "true" ]]; then
+          ork template -f "${{ inputs.template }}" --yaml -o "${{ inputs.template-yaml-output }}"
+          ork template -f "${{ inputs.template }}" --json -o "${{ inputs.template-json-output }}"
+        else
+          ork template --yaml -o "${{ inputs.template-yaml-output }}"
+          ork template --json -o "${{ inputs.template-json-output }}"
+        fi
         echo "yaml-file=${{ inputs.working-directory }}/${{ inputs.template-yaml-output }}" >> $GITHUB_OUTPUT
         echo "json-file=${{ inputs.working-directory }}/${{ inputs.template-json-output }}" >> $GITHUB_OUTPUT
 
