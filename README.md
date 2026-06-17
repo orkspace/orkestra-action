@@ -85,7 +85,7 @@ One of `plan-bundle` or `plan-cm` is required when `plan` is set.
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `template` | `""` | Path to `katalog.yaml` to render the fully-expanded runtime Katalog. Empty = skip. |
+| `template` | `""` | `'true'` = auto-detect `katalog.yaml` in working-directory. Path = render that file. Empty = skip. |
 | `template-yaml-output` | `template.yaml` | Output file for the YAML render (`ork template --yaml`). |
 | `template-json-output` | `template.json` | Output file for the JSON render (`ork template --json`). |
 
