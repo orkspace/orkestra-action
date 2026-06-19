@@ -523,6 +523,7 @@ runs:
 
     - name: Registry push
       if: inputs.registry-push != ''
+      id: push
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
@@ -532,7 +533,25 @@ runs:
         NO_E2E=""
         [[ "${{ inputs.registry-push-force }}" == "true" ]] && FORCE="--force"
         [[ "${{ inputs.registry-push-no-e2e }}" == "true" ]] && NO_E2E="--no-e2e"
-        ork push ${{ inputs.registry-push }} $FORCE $NO_E2E
+
+        # Run ork push and capture full output
+        OUTPUT=$(ork push ${{ inputs.registry-push }} $FORCE $NO_E2E 2>&1 | tee /dev/tty)
+
+        # Extract the OCI URL from the output
+        # Matches lines like: "✓ Pushed: oci://ghcr.io/ialexeze/katalogs/webapp-operator:v1.0.0"
+        PUSHED_URL=$(echo "$OUTPUT" | grep -oP '✓ Pushed: \K(oci://[^\s]+)' || echo "")
+        echo "pushed-url=$PUSHED_URL" >> $GITHUB_OUTPUT
+
+    - name: Inspect pushed Pattern
+      if: success() && steps.push.outputs.pushed-url != ''
+      env:
+        ORK_REGISTRY: ${{ inputs.registry-url }}
+      run: |
+        echo "## 📦 Pushed Pattern" >> $GITHUB_STEP_SUMMARY
+        echo "### Pattern metadata" >> $GITHUB_STEP_SUMMARY
+        echo '```yaml' >> $GITHUB_STEP_SUMMARY
+        ork inspect "${{ steps.push.outputs.pushed-url }}" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
 
     - name: Registry pull
       id: registry-pull
