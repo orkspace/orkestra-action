@@ -550,7 +550,7 @@ runs:
         rm -f "$PUSH_OUT"
 
     - name: Inspect pushed Pattern
-      if: success() && steps.push.outputs.pushed-url != ''
+      if: success() && steps.push.outputs.pushed-pattern != ''
       shell: bash
       env:
         ORK_REGISTRY: ${{ inputs.registry-url }}
