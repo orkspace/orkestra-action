@@ -562,7 +562,7 @@ runs:
         echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
         echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
 
-        echo "$INSPECT_OUT" | grep -E "^(  Registry:|  Kind:|  Digest:|  Simulate:|  E2E:|  Typed:)" | while read line; do
+        echo "$INSPECT_OUT" | grep -E "^(  Registry:|  Kind:|  Digest:|  Simulate:|  E2E:|  Typed:|  Runtime:)" | while read line; do
           key=$(echo "$line" | cut -d':' -f1 | sed 's/^  //')
           value=$(echo "$line" | cut -d':' -f2- | sed 's/^ //')
           # Replace status indicators
