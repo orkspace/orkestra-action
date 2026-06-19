@@ -544,6 +544,7 @@ runs:
 
     - name: Inspect pushed Pattern
       if: success() && steps.push.outputs.pushed-url != ''
+      shell: bash
       env:
         ORK_REGISTRY: ${{ inputs.registry-url }}
       run: |
