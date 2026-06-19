@@ -543,7 +543,7 @@ runs:
         set -e
 
         # Extract the pattern:tag from "Pushing webapp-operator:v1.0.0 ..."
-        PUSHED_NAME=$(grep -oP 'Pushing \K[^\s]+' "$PUSH_OUT" | head -1 || echo "")
+        PUSHED_PATTERN=$(grep -oP 'Pushing \K[^\s]+' "$PUSH_OUT" | head -1 || echo "")
         echo "pushed-pattern=$PUSHED_PATTERN" >> $GITHUB_OUTPUT
 
         # Clean up
