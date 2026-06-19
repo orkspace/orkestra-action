@@ -555,9 +555,27 @@ runs:
       env:
         ORK_REGISTRY: ${{ inputs.registry-url }}
       run: |
-        echo "## 📦 Pushed Pattern - ${{ steps.push.outputs.pushed-pattern }}" >> $GITHUB_STEP_SUMMARY
-        echo '```text' >> $GITHUB_STEP_SUMMARY
-        ork inspect "${{ steps.push.outputs.pushed-pattern }}" >> $GITHUB_STEP_SUMMARY
+        echo "## 📦 Pushed Pattern: ${{ steps.push.outputs.pushed-pattern }}" >> $GITHUB_STEP_SUMMARY
+
+        INSPECT_OUT=$(ork inspect "${{ steps.push.outputs.pushed-pattern }}" | sed -E 's/\x1b\[[0-9;]*m//g')
+
+        echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+
+        echo "$INSPECT_OUT" | grep -E "^(  Registry:|  Kind:|  Digest:|  Simulate:|  E2E:)" | while read line; do
+          key=$(echo "$line" | cut -d':' -f1 | sed 's/^  //')
+          value=$(echo "$line" | cut -d':' -f2- | sed 's/^ //')
+          # Replace status indicators
+          value=$(echo "$value" | sed 's/✓ Verified/✅ Verified/g')
+          value=$(echo "$value" | sed 's/✗ Failed/❌ Failed/g')
+          value=$(echo "$value" | sed 's/⊘ Skipped/⏭️ Skipped/g')
+          echo "| $key | $value |" >> $GITHUB_STEP_SUMMARY
+        done
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📥 Import" >> $GITHUB_STEP_SUMMARY
+        echo '```yaml' >> $GITHUB_STEP_SUMMARY
+        echo "$INSPECT_OUT" | sed -n '/To import:/,$p' | tail -n +2 >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
 
     - name: Registry pull
