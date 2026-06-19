@@ -569,6 +569,8 @@ runs:
           value=$(echo "$value" | sed 's/✓ Verified/✅ Verified/g')
           value=$(echo "$value" | sed 's/✗ Failed/❌ Failed/g')
           value=$(echo "$value" | sed 's/⊘ Skipped/⏭️ Skipped/g')
+          # Typed has special formatting - clean up the "requires custom runtime image" text
+          value=$(echo "$value" | sed 's/· requires custom runtime image//g')
           echo "| $key | $value |" >> $GITHUB_STEP_SUMMARY
         done
 
