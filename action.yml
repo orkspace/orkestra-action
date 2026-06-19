@@ -542,9 +542,9 @@ runs:
         PUSH_EXIT_CODE=$?
         set -e
 
-        # Extract OCI URL from the captured output
-        PUSHED_URL=$(grep -oP '✓ Pushed: \K(oci://[^\s]+)' "$PUSH_OUT" || echo "")
-        echo "pushed-url=$PUSHED_URL" >> $GITHUB_OUTPUT
+        # Extract the pattern:tag from "Pushing webapp-operator:v1.0.0 ..."
+        PUSHED_NAME=$(grep -oP 'Pushing \K[^\s]+' "$PUSH_OUT" | head -1 || echo "")
+        echo "pushed-pattern=$PUSHED_PATTERN" >> $GITHUB_OUTPUT
 
         # Clean up
         rm -f "$PUSH_OUT"
@@ -555,9 +555,9 @@ runs:
       env:
         ORK_REGISTRY: ${{ inputs.registry-url }}
       run: |
-        echo "## 📦 Pushed Pattern" >> $GITHUB_STEP_SUMMARY
+        echo "## 📦 Pushed Pattern - ${{ steps.push.outputs.pushed-pattern }}" >> $GITHUB_STEP_SUMMARY
         echo '```text' >> $GITHUB_STEP_SUMMARY
-        ork inspect "${{ steps.push.outputs.pushed-url }}" >> $GITHUB_STEP_SUMMARY
+        ork inspect "${{ steps.push.outputs.pushed-pattern }}" >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
 
     - name: Registry pull
