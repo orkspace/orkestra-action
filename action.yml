@@ -539,15 +539,18 @@ runs:
 
         set +e
         ork push ${{ inputs.registry-push }} $FORCE $NO_E2E 2>&1 | tee "$PUSH_OUT"
-        PUSH_EXIT_CODE=$?
+        PUSH_EXIT_CODE=${PIPESTATUS[0]}
         set -e
 
         # Extract the pattern:tag from "Pushing webapp-operator:v1.0.0 ..."
         PUSHED_PATTERN=$(grep -oP 'Pushing \K[^\s]+' "$PUSH_OUT" | head -1 || echo "")
         echo "pushed-pattern=$PUSHED_PATTERN" >> $GITHUB_OUTPUT
 
-        # Clean up
         rm -f "$PUSH_OUT"
+
+        if [[ $PUSH_EXIT_CODE -ne 0 ]]; then
+          exit $PUSH_EXIT_CODE
+        fi
 
     - name: Inspect pushed Pattern
       if: success() && steps.push.outputs.pushed-pattern != ''

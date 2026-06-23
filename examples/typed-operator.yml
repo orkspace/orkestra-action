@@ -1,32 +1,11 @@
-name: Typed operator CI
-
-# For typed (Go hooks / constructor) operators.
-# The ork CLI cannot run these — you must build your own operator binary,
-# package it as a Docker image, and deploy Orkestra with that image.
-#
-# Flow:
-#   1. Validate + simulate (no cluster — catches logic errors early)
-#   2. Generate runtime registry (Go code) from katalog.yaml
-#   3. Build the operator binary (Go)
-#   4. Build and push the Docker image
-#   5. Create cluster with ork (installs kind, kubectl, helm if absent)
-#   6. Load image into kind
-#   7. Generate bundle from katalog.yaml
-#   8. Apply bundle (CRDs, RBAC, runtime config) — must be before helm
-#   9. Deploy Orkestra with your operator image via Helm
-#  10. Run e2e against the running operator
+name: Publish database-operator
 
 on:
   push:
-    branches: [main]
-  pull_request:
-
-env:
-  IMAGE: ghcr.io/${{ github.repository_owner }}/my-operator
-  TAG: ${{ github.sha }}
+    tags: ["v*"]
 
 jobs:
-  ci:
+  publish:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -37,95 +16,59 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version-file: ./database-operator/go.mod
 
-      # ── Step 1: validate and simulate ────────────────────────────────────────
-      - name: Validate and simulate
-        uses: orkspace/orkestra-action@v1
-        with:
-          validate: "true"
-          simulate: "true"
+      - name: Set lowercase owner
+        run: echo "OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
-      # ── Step 2: generate the runtime registry ────────────────────────────────
-      # Writes pkg/runtime/zz_generated_runtime_registry.go from katalog.yaml.
+      # 1. Generate pkg/typeregistry/zz_generated_typeregistry.go from katalog.yaml.
+      #    Uses the standard ork installed by the action — only needs ork generate registry.
       - name: Generate runtime registry
         uses: orkspace/orkestra-action@v1
         with:
           generate-registry: "."
+          working-directory: ./database-operator
 
-      # ── Step 3: build the operator binary ────────────────────────────────────
-      # -tags runtime registers your Go types and hooks with the Orkestra runtime.
-      - name: Build
+      # 2. Build the production runtime binary (tags: runtime — no validate/simulate/e2e commands).
+      #    Placed in the Docker build context so the Dockerfile can COPY it in.
+      - name: Build runtime binary for Docker image
+        working-directory: database-operator
         run: |
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-            go build -tags runtime -o ./bin/operator ./cmd/operator
+          make build-runtime
+          mv $HOME/.orkestra/bin/runtime/ork ./ork
 
-      # ── Step 4: build and push Docker image ──────────────────────────────────
       - name: Log in to ghcr.io
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.ORK_ACTION_TOKEN }}
 
-      - name: Build and push image
+      - name: Build and push runtime image
         uses: docker/build-push-action@v5
         with:
-          context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ env.IMAGE }}:${{ env.TAG }}
+          context: ./database-operator
+          push: true
+          tags: ghcr.io/${{ env.OWNER }}/database-operator:${{ github.ref_name }}
 
-      # ── Step 5: create cluster ────────────────────────────────────────────────
-      # ork create cluster downloads kind, kubectl, and helm if absent,
-      # creates the ork-playground cluster, and switches kubectl context.
-      - name: Create cluster
-        if: github.event_name == 'pull_request'
-        run: ork create cluster --name ork-playground
+      # 3. Build the custom ork binary with the type registry compiled in.
+      #    Writes to ~/.orkestra/bin/ork, replacing the standard binary the action
+      #    installed in step 1. Subsequent action steps pick it up automatically.
+      - name: Build custom ork (full CLI)
+        working-directory: database-operator
+        run: make build
 
-      # ── Step 6: load image into kind ─────────────────────────────────────────
-      - name: Load image into kind
-        if: github.event_name == 'pull_request'
-        run: kind load docker-image ${{ env.IMAGE }}:${{ env.TAG }} --name ork-playground
-
-      # ── Step 7: generate bundle ───────────────────────────────────────────────
-      # The bundle contains the CRDs, RBAC, and runtime config for your operator.
-      # It must be applied before Helm so the cluster has the right resources.
-      - name: Generate bundle
-        if: github.event_name == 'pull_request'
-        id: bundle
+      # 4. Validate, simulate, and push using the custom ork (type registry compiled in).
+      #    Image is already in the registry — katalog published last so consumers
+      #    always pull both atomically.
+      - name: Publish to registry
         uses: orkspace/orkestra-action@v1
         with:
-          generate-bundle: ./katalog.yaml
-          generate-bundle-output: bundle.yaml
-
-      # ── Step 8: apply bundle ──────────────────────────────────────────────────
-      - name: Apply bundle
-        if: github.event_name == 'pull_request'
-        run: kubectl apply -f bundle.yaml
-
-      # ── Step 9: deploy Orkestra with your operator image ─────────────────────
-      - name: Deploy Orkestra
-        if: github.event_name == 'pull_request'
-        run: |
-          helm repo add orkestra https://orkspace.github.io/orkestra
-          helm upgrade --install orkestra orkestra/orkestra \
-            --set runtime.image.repository=${{ env.IMAGE }} \
-            --set runtime.image.tag=${{ env.TAG }} \
-            --namespace orkestra-system \
-            --create-namespace \
-            --wait --timeout 120s
-
-      # ── Step 10: run e2e against the running operator ─────────────────────────
-      - name: E2E
-        if: github.event_name == 'pull_request'
-        uses: orkspace/orkestra-action@v1
-        with:
-          e2e: "true"
-          e2e-cluster: kind-ork-playground
-
-      - name: Upload bundle artifact
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: bundle
-          path: ${{ steps.bundle.outputs.bundle-file }}
+          template: "true"
+          validate: "true"
+          simulate: "true"
+          registry-push: "database-operator:${{ github.ref_name }} ."
+          registry-url: "ghcr.io/${{ env.OWNER }}/katalogs"
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.ORK_ACTION_TOKEN }}
+          working-directory: ./database-operator
