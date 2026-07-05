@@ -191,6 +191,10 @@ inputs:
     description: "Comma-separated path patterns to skip in ./... discovery (ork e2e --skip)."
     required: false
     default: ""
+  e2e-report-file:
+    description: "Write the markdown results report to this file in addition to the GitHub step summary."
+    required: false
+    default: ""
 
   # ── registry push ───────────────────────────────────────────────────────────
   registry-push:
@@ -465,13 +469,19 @@ runs:
         [[ -n "${{ inputs.e2e-skip }}"                ]] && SKIP="--skip ${{ inputs.e2e-skip }}"
         [[ -n "${{ inputs.e2e-wait }}"                ]] && WAIT="--wait ${{ inputs.e2e-wait }}"
 
+        REPORT_TMP=$(mktemp --suffix=.md)
+
         if   [[ "${{ inputs.e2e-depth }}" == "full" ]]; then
-          ork e2e ./... $KEEP $CLUSTER $SKIP $WAIT
+          ork e2e ./... $KEEP $CLUSTER $SKIP $WAIT --report-file "$REPORT_TMP"
         elif [[ "${{ inputs.e2e }}" != "true" ]]; then
-          ork e2e -f "${{ inputs.e2e }}" $KEEP $CLUSTER
+          ork e2e -f "${{ inputs.e2e }}" $KEEP $CLUSTER --report-file "$REPORT_TMP"
         else
-          ork e2e $KEEP $CLUSTER
+          ork e2e $KEEP $CLUSTER --report-file "$REPORT_TMP"
         fi
+
+        cat "$REPORT_TMP" >> "$GITHUB_STEP_SUMMARY"
+        [[ -n "${{ inputs.e2e-report-file }}" ]] && cp "$REPORT_TMP" "${{ inputs.e2e-report-file }}"
+        rm -f "$REPORT_TMP"
 
     - name: Comment plan on PR
       if: inputs.comment-on-pr == 'true' && inputs.plan != '' && github.event_name == 'pull_request'
