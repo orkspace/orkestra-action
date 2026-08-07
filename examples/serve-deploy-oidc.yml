@@ -1,0 +1,44 @@
+name: Deploy via Gateway API (OIDC)
+
+# Deploys a CR through the Orkestra Gateway API using a GitHub Actions OIDC
+# token. No stored secret — the gateway verifies the JWT signature against
+# GitHub's public JWKS on every request.
+#
+# Gateway katalog must have a matching githubOIDC token entry, e.g.:
+#
+#   gateway:
+#     api:
+#       auth:
+#         tokens:
+#           - name: github-deploy
+#             githubOIDC:
+#               allow:
+#                 repository: myorg/myapp
+#                 ref: refs/heads/main
+#                 environment: production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cr.yaml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production     # gates the job on GitHub environment protection rules
+    permissions:
+      contents: read
+      id-token: write           # required to mint the OIDC token
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: orkspace/orkestra-action@v1
+        with:
+          validate: "true"
+          simulate: "true"
+          serve-apply: cr.yaml
+          serve-url: ${{ vars.ORK_GATEWAY_URL }}
+          serve-oidc: "true"
+          serve-target: production

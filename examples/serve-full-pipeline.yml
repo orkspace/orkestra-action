@@ -1,0 +1,59 @@
+name: Full CI + deploy pipeline
+
+# Validate and simulate locally, gate-check and preview on PR,
+# then deploy on merge via the Gateway API with OIDC.
+
+on:
+  pull_request:
+    paths: ["cr.yaml", "katalog.yaml"]
+  push:
+    branches: [main]
+    paths: ["cr.yaml", "katalog.yaml"]
+
+jobs:
+  # ── PR: validate, simulate, gate, preview ───────────────────────────────────
+  ci:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: orkspace/orkestra-action@v1
+        with:
+          validate: "true"
+          simulate: "true"
+          gate: cr.yaml           # admission check — no cluster needed
+          serve-play: cr.yaml     # preview the rendered CR in the step log
+
+  # ── merge: deploy via Gateway API with OIDC ─────────────────────────────────
+  deploy:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write             # required to mint the OIDC token
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Dry-run first — fails fast if the gateway would reject the CR.
+      - name: Dry run
+        uses: orkspace/orkestra-action@v1
+        with:
+          serve-apply: cr.yaml
+          serve-url: ${{ vars.ORK_GATEWAY_URL }}
+          serve-oidc: "true"
+          serve-target: production
+          serve-dry-run: "true"
+
+      # Apply for real.
+      - name: Deploy
+        uses: orkspace/orkestra-action@v1
+        with:
+          serve-apply: cr.yaml
+          serve-url: ${{ vars.ORK_GATEWAY_URL }}
+          serve-oidc: "true"
+          serve-target: production
