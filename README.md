@@ -14,7 +14,7 @@ The official GitHub Action for Orkestra — runs the full `ork` CLI surface from
 2. Runs only the commands you enable — everything else is skipped
 3. Exposes file paths as outputs for steps that produce artifacts
 
-Steps run in this order: **validate → simulate → plan → template → generate → e2e → registry**
+Steps run in this order: **validate → simulate → plan → template → generate → e2e → registry → gate → serve-play → serve-apply**
 
 ---
 
@@ -148,6 +148,42 @@ One of `plan-bundle` or `plan-cm` is required when `plan` is set.
 | `registry-pull` | `""` | `"name:version"`. Empty = skip. |
 | `registry-pull-out` | `""` | Directory to extract the pulled pattern into |
 
+### `gate`
+
+Runs `ork gate` to check whether a CR would be admitted by the operator — without writing anything to the cluster. Useful as a pre-deploy gate on a PR.
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `gate` | `""` | `'true'` = auto-detect `cr.yaml`. Path = run gate against that file. Empty = skip. |
+| `gate-katalog` | `""` | Explicit `katalog.yaml` path. Auto-detected when omitted. |
+| `gate-crd` | `""` | CRD name when the katalog defines multiple. All CRDs if omitted. |
+
+### `serve-apply`
+
+Applies a CR through the Gateway API (`ork serve apply`). Requires a running Orkestra gateway.
+
+Authentication is OIDC-first — set `serve-oidc: "true"` and the action mints a short-lived GitHub Actions JWT automatically. No stored secret needed. Alternatively, supply a static `serve-token`.
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `serve-apply` | `""` | `'true'` = use `cr.yaml`. Path = apply that file. Empty = skip. |
+| `serve-url` | `""` | Gateway API base URL (e.g. `https://gateway.myorg.io`). Required when `serve-apply` is set. |
+| `serve-oidc` | `""` | `'true'` = mint a GitHub Actions OIDC token as the bearer credential. Requires `id-token: write` permission on the job. |
+| `serve-oidc-audience` | `orkestra` | Audience for the minted OIDC token. Must match the `oidc.audience` configured in the gateway. |
+| `serve-token` | `""` | Static bearer token. Mutually exclusive with `serve-oidc`. |
+| `serve-target` | `""` | Serve target name. Required when the CRD has multiple targets. |
+| `serve-alias` | `""` | Serve alias name. Uses the primary target when omitted. |
+| `serve-dry-run` | `""` | `'true'` = preview without writing to the cluster. |
+
+### `serve-play`
+
+Previews how a CR would look after Gateway API processing (`ork serve play`) — evaluates templates, aliases, and payload transforms locally without a cluster or gateway.
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `serve-play` | `""` | Path to a CR file to preview. Empty = skip. |
+| `serve-play-katalog` | `""` | Explicit `katalog.yaml` path. Auto-detected when omitted. |
+
 ---
 
 ## Outputs
@@ -164,6 +200,8 @@ One of `plan-bundle` or `plan-cm` is required when `plan` is set.
 | `registry-file` | Path to the generated `zz_generated_runtime_registry.go` |
 | `simulate-debug-file` | Path to the `--debug-ops` trace file (set when `simulate-debug: true`) |
 | `pattern-path` | Local path where the pulled pattern was extracted |
+| `serve-applied` | `"true"` when `serve-apply` completed successfully |
+| `serve-play-file` | Path to the `serve play` output file |
 
 ---
 
@@ -334,6 +372,106 @@ jobs:
 ```
 
 See [`examples/plan-pr.yml`](examples/plan-pr.yml) for both patterns side by side.
+
+### Gate check on pull request
+
+Run `ork gate` to confirm a CR would be admitted before merging. No cluster access needed.
+
+```yaml
+- uses: actions/checkout@v4
+- uses: orkspace/orkestra-action@v1
+  with:
+    validate: "true"
+    gate: cr.yaml            # fails the job if the CR would be rejected
+```
+
+See [`examples/gate-pr.yml`](examples/gate-pr.yml) for a full PR workflow.
+
+### Deploy via Gateway API with OIDC — no stored secret
+
+GitHub Actions mints a short-lived JWT automatically. The gateway verifies it against GitHub's public JWKS — no secret is stored anywhere.
+
+The job needs `id-token: write` permission:
+
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write       # required for OIDC token minting
+    steps:
+      - uses: actions/checkout@v4
+      - uses: orkspace/orkestra-action@v1
+        with:
+          validate: "true"
+          simulate: "true"
+          serve-apply: cr.yaml
+          serve-url: https://gateway.myorg.io
+          serve-oidc: "true"
+          serve-target: production
+```
+
+The gateway katalog must have a `githubOIDC` token entry whose `allow` block matches
+this job (e.g. `repository`, `ref`, `environment`):
+
+```yaml
+gateway:
+  api:
+    auth:
+      tokens:
+        - name: github-deploy
+          githubOIDC:
+            allow:
+              repository: myorg/myapp
+              ref: refs/heads/main
+              environment: production
+```
+
+See [`examples/serve-deploy-oidc.yml`](examples/serve-deploy-oidc.yml) for the full workflow.
+
+### Deploy via Gateway API with a static token
+
+Use when OIDC is not available (self-hosted runners without OIDC support, or non-GitHub providers).
+
+```yaml
+- uses: orkspace/orkestra-action@v1
+  with:
+    serve-apply: cr.yaml
+    serve-url: https://gateway.myorg.io
+    serve-token: ${{ secrets.ORK_GATEWAY_TOKEN }}
+    serve-target: staging
+```
+
+### Preview CR before apply (serve play)
+
+`ork serve play` evaluates templates and aliases locally — useful for previewing the
+rendered CR on a PR without a live gateway.
+
+```yaml
+- uses: orkspace/orkestra-action@v1
+  with:
+    serve-play: cr.yaml      # prints the rendered CR to the step log
+```
+
+### Full CI + deploy pipeline
+
+Validate and simulate locally, gate-check on PR, then deploy on merge:
+
+```yaml
+- uses: orkspace/orkestra-action@v1
+  with:
+    validate: "true"
+    simulate: "true"
+    gate: cr.yaml             # admission check — no cluster needed
+    serve-play: cr.yaml       # preview rendered CR
+    serve-apply: cr.yaml      # deploy via Gateway API
+    serve-url: https://gateway.myorg.io
+    serve-oidc: "true"
+    serve-target: production
+```
+
+See [`examples/serve-full-pipeline.yml`](examples/serve-full-pipeline.yml) for the full workflow with permissions, environment protection, and dry-run on PR.
 
 ### Publish a pattern on tag push
 

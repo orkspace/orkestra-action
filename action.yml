@@ -232,6 +232,64 @@ inputs:
     required: false
     default: ""
 
+  # ── gate ────────────────────────────────────────────────────────────────────
+  gate:
+    description: "'true' = auto-detect cr.yaml. Path = run ork gate against that file. Empty = skip."
+    required: false
+    default: ""
+  gate-katalog:
+    description: "Explicit katalog.yaml path for ork gate. Auto-detected when omitted."
+    required: false
+    default: ""
+  gate-crd:
+    description: "CRD name to target when the katalog defines multiple. All CRDs if omitted."
+    required: false
+    default: ""
+
+  # ── serve apply ─────────────────────────────────────────────────────────────
+  serve-apply:
+    description: "'true' = auto-detect cr.yaml. Path = apply that CR file via the Gateway API. Empty = skip."
+    required: false
+    default: ""
+  serve-url:
+    description: "Gateway API base URL (e.g. https://gateway.myorg.io)."
+    required: false
+    default: ""
+  serve-token:
+    description: "Static bearer token for Gateway API authentication. Mutually exclusive with serve-oidc."
+    required: false
+    default: ""
+  serve-oidc:
+    description: "'true' = mint a GitHub Actions OIDC token and use it as the bearer token. Requires id-token: write permission on the job."
+    required: false
+    default: ""
+  serve-oidc-audience:
+    description: "Audience for the minted OIDC token. Defaults to 'orkestra'."
+    required: false
+    default: "orkestra"
+  serve-target:
+    description: "Serve target name to apply against. Required when the CRD has multiple targets."
+    required: false
+    default: ""
+  serve-alias:
+    description: "Serve alias name. Uses the primary target when omitted."
+    required: false
+    default: ""
+  serve-dry-run:
+    description: "'true' = preview what would be applied without writing to the cluster (?dryRun=true)."
+    required: false
+    default: ""
+
+  # ── serve play ──────────────────────────────────────────────────────────────
+  serve-play:
+    description: "Path to a CR file to preview via ork serve play (no cluster write). Empty = skip."
+    required: false
+    default: ""
+  serve-play-katalog:
+    description: "Explicit katalog.yaml path for ork serve play. Auto-detected when omitted."
+    required: false
+    default: ""
+
 outputs:
   # ── plan ────────────────────────────────────────────────────────────────────
   plan-file:
@@ -272,6 +330,14 @@ outputs:
   pattern-path:
     description: "Local path where the pulled pattern was extracted."
     value: ${{ steps.registry-pull.outputs.path }}
+
+  # ── serve ────────────────────────────────────────────────────────────────────
+  serve-applied:
+    description: "'true' when serve-apply completed successfully."
+    value: ${{ steps.serve-apply.outputs.applied }}
+  serve-play-file:
+    description: "Path to the serve play output file."
+    value: ${{ steps.serve-play.outputs.file }}
 
 runs:
   using: "composite"
@@ -605,3 +671,70 @@ runs:
         [[ -n "${{ inputs.registry-pull-out }}" ]] && OUT="--out ${{ inputs.registry-pull-out }}"
         ork pull ${{ inputs.registry-pull }} $OUT
         echo "path=${{ inputs.working-directory }}/${{ inputs.registry-pull-out || '.' }}" >> $GITHUB_OUTPUT
+
+    - name: Gate
+      if: inputs.gate != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        CRD="" KATALOG=""
+        [[ -n "${{ inputs.gate-crd }}"     ]] && CRD="--crd ${{ inputs.gate-crd }}"
+        [[ -n "${{ inputs.gate-katalog }}" ]] && KATALOG="-f ${{ inputs.gate-katalog }}"
+
+        if [[ "${{ inputs.gate }}" != "true" ]]; then
+          ork gate $KATALOG "${{ inputs.gate }}" $CRD
+        else
+          ork gate $KATALOG $CRD
+        fi
+
+    - name: Serve play
+      id: serve-play
+      if: inputs.serve-play != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        KATALOG="" OUTPUT="serve-play.txt"
+        [[ -n "${{ inputs.serve-play-katalog }}" ]] && KATALOG="-f ${{ inputs.serve-play-katalog }}"
+        ork serve play $KATALOG "${{ inputs.serve-play }}" | tee "$OUTPUT"
+        echo "file=${{ inputs.working-directory }}/$OUTPUT" >> $GITHUB_OUTPUT
+
+    - name: Serve apply
+      id: serve-apply
+      if: inputs.serve-apply != '' && inputs.serve-url != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        # Resolve bearer token — OIDC takes precedence over a static token.
+        BEARER=""
+        if [[ "${{ inputs.serve-oidc }}" == "true" ]]; then
+          if [[ -z "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]]; then
+            echo "::error::serve-oidc: true requires id-token: write permission on the job" >&2
+            exit 1
+          fi
+          AUDIENCE="${{ inputs.serve-oidc-audience }}"
+          BEARER=$(curl -sSfL \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" \
+            | jq -r '.value')
+        elif [[ -n "${{ inputs.serve-token }}" ]]; then
+          BEARER="${{ inputs.serve-token }}"
+        else
+          echo "::error::serve-apply requires either serve-oidc: true or serve-token" >&2
+          exit 1
+        fi
+
+        TARGET="" ALIAS="" DRY_RUN=""
+        [[ -n "${{ inputs.serve-target }}"  ]] && TARGET="--target ${{ inputs.serve-target }}"
+        [[ -n "${{ inputs.serve-alias }}"   ]] && ALIAS="--alias ${{ inputs.serve-alias }}"
+        [[ "${{ inputs.serve-dry-run }}" == "true" ]] && DRY_RUN="--dry-run"
+
+        CR="${{ inputs.serve-apply }}"
+        [[ "$CR" == "true" ]] && CR="cr.yaml"
+
+        ork serve apply \
+          --url "${{ inputs.serve-url }}" \
+          --token "$BEARER" \
+          $TARGET $ALIAS $DRY_RUN \
+          "$CR"
+
+        echo "applied=true" >> $GITHUB_OUTPUT

@@ -1,0 +1,20 @@
+name: Gate check
+
+on:
+  pull_request:
+    paths:
+      - "cr.yaml"
+      - "katalog.yaml"
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: orkspace/orkestra-action@v1
+        with:
+          validate: "true"
+          gate: cr.yaml
